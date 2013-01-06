@@ -1,0 +1,7 @@
+*.pyc
+__pycache__
+source
+release
+install
+build
+
