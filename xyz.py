@@ -154,15 +154,18 @@ class Builder:
         config = rules.prepare(self, config)
 
         # Install all deps
+        # Install all deps
         for dep in rules.deps:
             ensure_dir(config['devtree_dir'])
-            if config['target'] is not None:
-                qual_format = '{dep}-{target}-{host}'
-            else:
-                qual_format = '{dep}-{host}'
+            qual_format = '{dep}-{target}-{host}'
             qualifed_dep = qual_format.format(dep=dep, **config)
-            print("Installing dep", qualifed_dep)
             rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
+            if not os.path.exists(rel_file):
+                qual_format = '{dep}-{host}'
+                qualifed_dep = qual_format.format(dep=dep, **config)
+                rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
+
+            logger.info("Installing dep", qualifed_dep)
             self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
 
         # Download
