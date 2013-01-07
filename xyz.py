@@ -319,7 +319,7 @@ class Builder:
         return os.path.join(*[a.format(**config) for a in args])
 
     def cmd(self, cmd, *args, env={}, config={}):
-        _env = {'PATH': '/usr/bin:/bin'}
+        _env = {'PATH': '{devtree_dir_abs}/{host}/bin:/usr/bin:/bin'.format(**config)}
         _env.update(env)
         for key in _env:
             _env[key] = _env[key].format(**config)
