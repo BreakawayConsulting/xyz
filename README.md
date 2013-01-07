@@ -15,9 +15,15 @@ The goal of XYZ packages is that a user shouldn't need to install any additional
 This generally means that the packaged applications are mostly statically compiled, or ship with any required shared libraries.
 Of course the usual dynamic vs static library trade-offs apply here, so if you prefer the benefits of shared libraries this system isn't for you.
 At some level assumptions about the underlying platform must be made.
-For OS X platforms packages depend on the `libSystem` shared library and the `libiconv`.
-Some packages may also depend on standard CoreFramework APIs.
-For GNU/Linux platforms packages depend on GNU libc.
+In general common `standard` libraries are assumed to exist on the platform. Including:
+
+* libc (libSystem on OS X).
+* libm
+* libiconv (include in glibc on GNU/Linux)
+* libncurses
+* libz
+
+Some packages on OS Xmay also depend on standard CoreFramework APIs.
 Dependencies on other shared libraries, or filesystem paths are avoided to the largest extent possible.
 
 
