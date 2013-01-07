@@ -129,8 +129,10 @@ class Builder:
         plat = sys.platform
         arch = platform.architecture()[0]
 
-        if plat == 'darwin' and arch  == '64bit':
+        if plat == 'darwin' and arch == '64bit':
             build = 'x86_64-apple-darwin'
+        elif plat == 'linux2' and arch == '64bit':
+            build = 'x86_64-unknown-linux-gnu'
         # Add other supported platforms as required.
 
         if build is None:
@@ -243,7 +245,12 @@ class Builder:
 
         config['repo_name'] = SOURCE_REPO_PREFIX + pkg_name
 
-        config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
+        if config['build'].endswith('-darwin'):
+            config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
+        elif config['build'].endswith('-linux-gnu'):
+            config['standard_ldflags'] = ""
+        else:
+            raise UsageError("Can't determine LD flags for {build}".format(**config))
         config['jobs'] = "-j{}".format(self.jobs)
 
         return config
