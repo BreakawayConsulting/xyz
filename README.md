@@ -111,6 +111,7 @@ Th following systems have provided some form of design inspiration and ideas tow
 * Homebrew
 * dpkg / apt-get
 * RPM / yum
+* MinGW
 
 
 Reproducible builds
