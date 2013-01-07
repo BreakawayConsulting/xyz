@@ -163,8 +163,7 @@ class Builder:
         if os.path.exists(config['install_dir']):
             shutil.rmtree(config['install_dir'])
         ensure_dir(config['install_dir'])
-        with chdir(config['build_dir']):
-            rules.install(self, config)
+        rules.install(self, config)
         # Package
         self._package(config)
 
@@ -313,6 +312,18 @@ class Builder:
             if r != 0:
                 raise Exception("Error: {}".format(r))
 
+    def host_lib_configure(self, *extra_args, env={}, config={}):
+        args = ('{source_dir_from_build}/configure',
+                 '--prefix={prefix}',
+                 '--exec-prefix={eprefix}',
+                 '--host={host}',
+                 '--build={build}',
+                 '--disable-shared',
+                 )
+        base_env = {'LDFLAGS': '{standard_ldflags}'}
+        base_env.update(env)
+        self.cmd(*(args + extra_args), env=env, config=config)
+
     def cross_configure(self, *extra_args, env={}, config={}):
         args = ('{source_dir_from_build}/configure',
                 '--prefix={prefix}',
@@ -321,8 +332,9 @@ class Builder:
                 '--host={host}',
                 '--build={build}',
                 '--target={target}')
-        env.update({'LDFLAGS': '{standard_ldflags}'})
-        self.cmd(*(args + extra_args), env=env, config=config)
+        base_env = {'LDFLAGS': '{standard_ldflags}'}
+        base_env.update(env)
+        self.cmd(*(args + extra_args), env=base_env, config=config)
 
     def __str__(self):
         return '<Builder: build={} host={} target={}>'.format(self.build, self.host, self.target)
@@ -379,11 +391,20 @@ class BuildProtocol:
         this command is packaged by the builder for release.
 
         """
-        builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=config)
+        with chdir(config['build_dir']):
+            builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=config)
+
         # Now remove the silly info/dir file if it exists.
-        info_dir = builder.j('{install_dir_abs}', config['prefix'][1:], 'share', 'info', 'dir', config=config)
+        info_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'info', 'dir', config=config)
         if os.path.exists(info_dir):
             os.unlink(info_dir)
+
+        # And remove any .la files
+        for root, _, files in os.walk('{install_dir}'.format(**config)):
+            for f in files:
+                if f.endswith('.la'):
+                    os.unlink(os.path.join(root, f))
+
 
     def __str__(self):
         return "<{}>".format(self.__class__.__name__)

@@ -120,13 +120,13 @@ One of the goals of XYZ is that it should be simple to reproduce builds easily.
 To achieve this the tools aims to minimize the extent to which environmental concerns may impact on the build.
 Some of the techniques used are:
 
-### `-Z` linker flag
+### `-Z` linker flag (OS X only)
 
 The `-Z` flag disables the standard linker library search path.
 Specifically, this stops the linker searching `/usr/local/lib`, which may contain any number of uncontrolled libraries.
 Use of this flag avoids inadvertently using these libraries.
 
-### `-search_paths_first` linker flag.
+### `-search_paths_first` linker flag. (OS X only)
 
 On OS X the standard search path is unintuitive.
 The linker tries very hard to use dynamic libraries over static libraries, and will search all paths for a dynamic library before falling back to static libraries.
@@ -136,6 +136,11 @@ The `-search_paths_first` linker flag changes this behaviour so that the linker 
 
 A standard `PATH` environment variable is used to avoid any user specific binaries.
 Currently this is set to `/usr/bin:/bin`.
+
+### Removing .la files
+
+Despite protestations to the contrary `.la` files are generally not needed by the linke, however their hardcoded paths can really mess things up.
+By default `.la` files are removed post-installation.
 
 
 Writing the rules
@@ -147,6 +152,7 @@ The name of the description should be `<pkg_name>.py`.
 The package python file should export a module level variable `rules`.
 The `rules` object should be an instance of a subclass of the `BuildProtocol` class.
 See the `BuildProtocol` class documentation strings for details on the various methods that should be provied.
+
 
 Future Work
 --------------
