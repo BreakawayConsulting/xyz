@@ -152,6 +152,19 @@ class Builder:
         # Prepare
         config = self._std_config(pkg_name)
         config = rules.prepare(self, config)
+
+        # Install all deps
+        for dep in rules.deps:
+            ensure_dir(config['devtree_dir'])
+            if config['target'] is not None:
+                qual_format = '{dep}-{target}-{host}'
+            else:
+                qual_format = '{dep}-{host}'
+            qualifed_dep = qual_format.format(dep=dep, **config)
+            print("Installing dep", qualifed_dep)
+            rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
+            self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
+
         # Download
         self._download(config)
         # Configure
@@ -236,6 +249,8 @@ class Builder:
             config['source_dir_from_build'] = self.j('..', '..', '{source_dir}', config=config)
 
         config['build_dir'] = self.j('{root_dir}', 'build', '{qualifed_pkg_name}', config=config)
+        config['devtree_dir'] = self.j('{root_dir}', 'devtree', '{qualifed_pkg_name}', config=config)
+        config['devtree_dir_abs'] = os.path.abspath(config['devtree_dir'])
         config['install_dir'] = self.j('{root_dir}', 'install', '{qualifed_pkg_name}', config=config)
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
@@ -250,6 +265,10 @@ class Builder:
             config['standard_ldflags'] = ""
         else:
             raise UsageError("Can't determine LD flags for {build}".format(**config))
+
+        config['standard_ldflags'] += " -L{devtree_dir_abs}/{host}/lib".format(**config)
+        config['standard_cppflags'] = "-I{devtree_dir_abs}/include -I{devtree_dir_abs}/{host}/include".format(**config)
+
         config['jobs'] = "-j{}".format(self.jobs)
 
         return config
@@ -320,9 +339,11 @@ class Builder:
                  '--build={build}',
                  '--disable-shared',
                  )
-        base_env = {'LDFLAGS': '{standard_ldflags}'}
+        base_env = {'LDFLAGS': '{standard_ldflags}',
+                    'CPPFLAGS': '{standard_cppflags}',
+                    }
         base_env.update(env)
-        self.cmd(*(args + extra_args), env=env, config=config)
+        self.cmd(*(args + extra_args), env=base_env, config=config)
 
     def cross_configure(self, *extra_args, env={}, config={}):
         args = ('{source_dir_from_build}/configure',
@@ -353,6 +374,7 @@ class BuildProtocol:
 
     """
     pkg_name = None
+    deps = []
 
     def check(self, builder):
         """check can perform various checks to ensure that the package
