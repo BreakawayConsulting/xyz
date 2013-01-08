@@ -12,7 +12,12 @@ class Python(xyz.BuildProtocol):
         ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
         builder.cross_configure('--disable-shared', config=config,
                                 env={'LDFLAGS': ldflags})
-        setup_dist = 'pySetup.dist.darwin'
+        if config['host'].endswith('darwin'):
+            setup_dist = 'pySetup.dist.darwin'
+        elif config['host'].endswith('linux-gnu'):
+            setup_dist = 'pySetup.dist.linux'
+        else:
+            raise UsageError("Host for python package must be on darwin or linux-gnu (not {})".format(config['host']))
         time.sleep(1)
         shutil.copy(os.path.join(data_dir, setup_dist), 'Modules/Setup')
         # Need to regen Makefile after updating Modules/Setup
