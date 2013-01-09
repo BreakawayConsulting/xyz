@@ -26,6 +26,18 @@ logging.basicConfig(level=logging.INFO)
 
 BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
 
+def man_remove_header(m):
+    tmp = '{}.tmp'.format(m)
+    with open(m) as inp, open(tmp, 'w') as outp:
+        first = True
+        for l in inp:
+            if first:
+                first = False
+                if 'generated' in l:
+                    continue
+            outp.write(l)
+    os.rename(tmp, m)
+
 def tar_info_filter(tarinfo):
     tarinfo.uname = 'xyz'
     tarinfo.gname = 'xyz'
@@ -447,6 +459,12 @@ class BuildProtocol:
             for f in files:
                 if f.endswith('.la'):
                     os.unlink(os.path.join(root, f))
+
+        # Remove the header from man page
+        man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
+        for root, _, files in os.walk(man_dir):
+            for f in files:
+                man_remove_header(os.path.join(root, f))
 
 
     def __str__(self):
