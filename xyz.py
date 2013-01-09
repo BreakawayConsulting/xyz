@@ -30,8 +30,8 @@ def rmtree(path):
     # FIXME: This has time-of-check time-of-use problem.
     # should really catch the right exception instead.
     if os.path.exists(path):
+        logger.info("Removing tree {}".format(path))
         shutil.rmtree(path)
-
 
 
 def man_remove_header(m):
@@ -59,7 +59,8 @@ def tar_info_filter(tarinfo):
 def tar_bz2(output, tree):
     with tarfile.open(output, 'w:bz2', format=tarfile.GNU_FORMAT) as tf:
         with chdir(tree):
-            tf.add('.', filter=tar_info_filter)
+            for f in os.listdir('.'):
+                tf.add(f, filter=tar_info_filter)
 
 
 class UsageError(Exception):
@@ -222,7 +223,6 @@ class Builder:
 
             logger.info("Installing dep: %s", qualifed_dep)
             self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
-
 
         # Download
         self._download(config)
