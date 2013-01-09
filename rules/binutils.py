@@ -25,5 +25,10 @@ class Binutils(xyz.BuildProtocol):
         man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
         shutil.rmtree(man_dir)
 
+        # For now we strip the info pages too.
+        # Different versino of texinfo product different output!
+        info_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'info', config=config)
+        shutil.rmtree(info_dir)
+
 
 rules = Binutils()
