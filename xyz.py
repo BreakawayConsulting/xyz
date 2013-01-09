@@ -26,6 +26,13 @@ logging.basicConfig(level=logging.INFO)
 
 BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
 
+def rmtree(path):
+    # FIXME: This has time-of-check time-of-use problem.
+    # should really catch the right exception instead.
+    if os.path.exists(path):
+        shutil.rmtree(path)
+
+
 
 def man_remove_header(m):
     tmp = '{}.tmp'.format(m)
@@ -179,13 +186,16 @@ class Builder:
             raise Exception("Unsupported platform/architecture: {}/{}".format(plat, arch))
         return build
 
-    def build(self, pkg_name, reconfigure=False):
+    def build(self, pkg_name, reconfigure=False, force=False):
         """Build a specified package.
 
         By default the build process avoid re-running the configuration process,
         however this can be forced by setting `reconfigure` to true.
 
+        By default the build will run make.
+
         """
+
         rules = self._load_rules(pkg_name)
         # Check
         rules.check(self)
@@ -193,7 +203,12 @@ class Builder:
         config = self._std_config(pkg_name)
         config = rules.prepare(self, config)
 
-        # Install all deps
+        # If forced, remove the various dirs.
+        if force:
+            rmtree(self.j('{devtree_dir}', config=config))
+            rmtree(self.j('{build_dir}', config=config))
+            rmtree(self.j('{install_dir}', config=config))
+
         # Install all deps
         for dep in rules.deps:
             ensure_dir(config['devtree_dir'])
@@ -534,6 +549,7 @@ def main(args):
     parser.add_argument('--host', help='Explicitly set the host system. (default: build)')
     parser.add_argument('--target', help='Explicitly set the target system (for toolchains). (default: None)')
     parser.add_argument('--reconfigure', help='Reconfigure. (default: False)', action='store_true', default=False)
+    parser.add_argument('--force', help='Force a build. (default: False)', action='store_true', default=False)
     parser.add_argument('-j', dest='jobs', help='Simultaneous jobs. (default: 1)', type=int, default=1)
     parser.add_argument('--check-releases', dest='check_releases', action='store_true', default=False,
                         help='Check that the release files are consistent.')
@@ -552,7 +568,7 @@ def main(args):
 
     b = Builder(args.build, args.host, args.target, args.jobs)
     for pkg in args.packages:
-        b.build(pkg, args.reconfigure)
+        b.build(pkg, args.reconfigure, args.force)
 
     return 0
 
