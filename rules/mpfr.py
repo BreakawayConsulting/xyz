@@ -4,7 +4,7 @@ import shutil
 
 class Mpfr(xyz.BuildProtocol):
     pkg_name = 'mpfr'
-    deps = ['gmp']
+    deps = ['texinfo', 'gmp']
 
     def configure(self, builder, config):
         builder.host_lib_configure(config=config)
