@@ -20,6 +20,10 @@ class Binutils(xyz.BuildProtocol):
         libdir = builder.j('{install_dir_abs}', config['eprefix'][1:], 'lib', config=config)
         if os.path.exists(libdir):
             shutil.rmtree(libdir)
+        # For now we strip the man pages.
+        # man pages created on different systems are (for no good reason) different!
+        man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
+        shutil.rmtree(man_dir)
 
 
 rules = Binutils()
