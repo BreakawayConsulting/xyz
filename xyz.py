@@ -472,10 +472,11 @@ class BuildProtocol:
                     os.unlink(os.path.join(root, f))
 
         # Remove the header from man page
-        man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
-        for root, _, files in os.walk(man_dir):
-            for f in files:
-                man_remove_header(os.path.join(root, f))
+        with umask(0o22):
+            man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
+            for root, _, files in os.walk(man_dir):
+                for f in files:
+                    man_remove_header(os.path.join(root, f))
 
 
     def __str__(self):
