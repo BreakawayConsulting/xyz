@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 
 BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
 
+
 def man_remove_header(m):
     tmp = '{}.tmp'.format(m)
     with open(m) as inp, open(tmp, 'w') as outp:
@@ -38,6 +39,7 @@ def man_remove_header(m):
             outp.write(l)
     os.rename(tmp, m)
 
+
 def tar_info_filter(tarinfo):
     tarinfo.uname = 'xyz'
     tarinfo.gname = 'xyz'
@@ -46,10 +48,12 @@ def tar_info_filter(tarinfo):
     tarinfo.gid = 1000
     return tarinfo
 
+
 def tar_bz2(output, tree):
     with tarfile.open(output, 'w:bz2', format=tarfile.GNU_FORMAT) as tf:
         with chdir(tree):
             tf.add('.', filter=tar_info_filter)
+
 
 class UsageError(Exception):
     """This exception is caught 'cleanly' when running as a script.
@@ -86,6 +90,13 @@ def chdir(path):
     os.chdir(path)
     yield
     os.chdir(cwd)
+
+
+@contextmanager
+def umask(new_mask):
+    cur_mask = os.umask(new_mask)
+    yield
+    os.umask(cur_mask)
 
 
 @contextmanager
@@ -446,7 +457,7 @@ class BuildProtocol:
         this command is packaged by the builder for release.
 
         """
-        with chdir(config['build_dir']):
+        with chdir(config['build_dir']), umask(0o22):
             builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=config)
 
         # Now remove the silly info/dir file if it exists.
