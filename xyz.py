@@ -7,6 +7,7 @@ See README.md for details.
 import os
 import sys
 import platform
+import calendar
 import logging
 import shutil
 import tarfile
@@ -23,6 +24,20 @@ sys.modules['xyz'] = sys.modules[__name__]
 logger = logging.getLogger('xyz')
 logging.basicConfig(level=logging.INFO)
 
+BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
+
+def tar_info_filter(tarinfo):
+    tarinfo.uname = 'xyz'
+    tarinfo.gname = 'xyz'
+    tarinfo.mtime = BASE_TIME
+    tarinfo.uid = 1000
+    tarinfo.gid = 1000
+    return tarinfo
+
+def tar_bz2(output, tree):
+    with tarfile.open(output, 'w:bz2', format=tarfile.GNU_FORMAT) as tf:
+        with chdir(tree):
+            tf.add('.', filter=tar_info_filter)
 
 class UsageError(Exception):
     """This exception is caught 'cleanly' when running as a script.
@@ -170,6 +185,7 @@ class Builder:
             logger.info("Installing dep: %s", qualifed_dep)
             self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
 
+
         # Download
         self._download(config)
         # Configure
@@ -315,7 +331,7 @@ class Builder:
     def _package(self, config):
         ensure_dir(config['release_dir'])
         pkg_root = self.j('{install_dir}', config['prefix'][1:], config=config)
-        self.cmd('tar', '-c', '-j', '-f', '{release_file}', '-C', pkg_root, '.', config=config)
+        tar_bz2('{release_file}'.format(**config), pkg_root)
 
     def j(self, *args, config={}):
         return os.path.join(*[a.format(**config) for a in args])
