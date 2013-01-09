@@ -9,6 +9,8 @@ import sys
 import platform
 import logging
 import shutil
+import tarfile
+import hashlib
 from contextlib import contextmanager
 
 # Location where all the git repo where the source is stored.
@@ -435,6 +437,43 @@ class BuildProtocol:
         return "<{}>".format(self.__class__.__name__)
 
 
+def check_releases():
+    release_dir = 'release'
+    all_files = {}
+    for f in os.listdir(release_dir):
+        print(f)
+        with tarfile.open(os.path.join(release_dir, f)) as t:
+            for m in t.getmembers():
+                if m.type not in (tarfile.REGTYPE, tarfile.DIRTYPE, tarfile.LNKTYPE, tarfile.SYMTYPE):
+                    raise Exception("{} is the wrong type ({})".format(m.name, m.type))
+
+                e_type = {tarfile.REGTYPE: 'FILE', tarfile.DIRTYPE: 'DIR', tarfile.LNKTYPE: 'LINK', tarfile.SYMTYPE: 'SYMLINK'}[m.type]
+                extra = ''
+                if m.islnk():
+                    extra = '==> ' + m.linkname
+                    d = m.linkname
+                elif m.issym():
+                    extra = '--> ' + m.linkname
+                    d = m.linkname
+                elif m.isfile():
+                    data = t.extractfile(m.name).read()
+                    digest = hashlib.sha256(data).hexdigest()
+                    d = digest
+                    extra = digest
+                elif m.isdir():
+                    d = None
+
+                dupe = ' '
+                info_pack = (e_type, d, m.mtime, m.mode, m.uid, m.gid, m.uname, m.gname)
+                if m.name in all_files:
+                    dupe = 'X'
+                    if all_files[m.name] != info_pack:
+                        print("{} already extracted! {} != {}".format(m.name, all_files[m.name], info_pack))
+                    #assert all_files[m.name] == (e_type, d)
+                all_files[m.name] = info_pack
+                print('\t{} - {:10s} {} {}'.format(dupe, e_type, m.name, extra))
+
+
 def main(args):
     """main entry point. args is a list of arguments, generally provided directly
     from sys.argv
@@ -450,9 +489,20 @@ def main(args):
     parser.add_argument('--target', help='Explicitly set the target system (for toolchains). (default: None)')
     parser.add_argument('--reconfigure', help='Reconfigure. (default: False)', action='store_true', default=False)
     parser.add_argument('-j', dest='jobs', help='Simultaneous jobs. (default: 1)', type=int, default=1)
-    parser.add_argument('packages', metavar='PKG', nargs='+', help='list of packages to build')
+    parser.add_argument('--check-releases', dest='check_releases', action='store_true', default=False,
+                        help='Check that the release files are consistent.')
+    parser.add_argument('packages', metavar='PKG', nargs='*', help='list of packages to build')
 
     args = parser.parse_args(args[1:])
+
+    if (args.check_releases and len(args.packages) > 0):
+        parser.error("Do not specify packages when checking releases.")
+    elif (not args.check_releases and len(args.packages) == 0):
+        parser.error("At least one package must be listed.")
+
+    if args.check_releases:
+        check_releases()
+        return 0
 
     b = Builder(args.build, args.host, args.target, args.jobs)
     for pkg in args.packages:
