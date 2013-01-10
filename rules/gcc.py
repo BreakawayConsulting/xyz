@@ -26,5 +26,15 @@ class Gcc(xyz.BuildProtocol):
                                 '--with-mpfr-lib={devtree_dir_abs}/{host}/lib',
                                 '--with-mpfr-include={devtree_dir_abs}/include', config=config)
 
+    def install(self, builder, config):
+        super().install(builder, config)
+        # For some reason gcc plonks libiberty.a in the output directory
+        libdir = builder.j('{install_dir_abs}', config['eprefix'][1:], 'lib', config=config)
+        if os.path.exists(libdir):
+            shutil.rmtree(libdir)
+        # For now we strip the man pages.
+        # man pages created on different systems are (for no good reason) different!
+        man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
+        shutil.rmtree(man_dir)
 
 rules = Gcc()
