@@ -25,7 +25,7 @@ class Python(xyz.BuildProtocol):
         builder.cmd('make', 'Makefile', config=config)
 
     def install(self, builder, config):
-        with xyz.chdir(config['build_dir']):
+        with xyz.chdir(config['build_dir']), xyz.umask(0o022):
             builder.cmd('make', 'DESTDIR={install_dir_abs}',
                         'bininstall', 'inclinstall', 'libainstall', 'libinstall',
                         config=config)
