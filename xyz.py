@@ -221,6 +221,10 @@ class Builder:
                 qualifed_dep = qual_format.format(dep=dep, **config)
                 rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
 
+            if not os.path.exists(rel_file):
+                logger.info("Doing recursive build of '{}'".format(dep))
+                self.build(dep, reconfigure=reconfigure, force=force)
+
             logger.info("Installing dep: %s", qualifed_dep)
             self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
 
