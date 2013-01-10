@@ -201,7 +201,7 @@ class Builder:
         # Check
         rules.check(self)
         # Prepare
-        config = self._std_config(pkg_name)
+        config = self._std_config(rules)
         config = rules.prepare(self, config)
 
         # If forced, remove the various dirs.
@@ -213,7 +213,7 @@ class Builder:
         # Install all deps
         for dep in rules.deps:
             ensure_dir(config['devtree_dir'])
-            dep_rules = self._load_rules(pkg_name)
+            dep_rules = self._load_rules(dep)
             if dep_rules.crosstool:
                 qual_format = '{dep}-{target}-{host}'
             else:
@@ -251,7 +251,7 @@ class Builder:
         assert pkg_rules.pkg_name == pkg_name
         return pkg_rules
 
-    def _std_config(self, pkg_name):
+    def _std_config(self, rules):
         """Generate the standard configuration for a given package.
 
         Config returns a dictionary with a set of standard key-value
@@ -287,13 +287,13 @@ class Builder:
         """
         config = {}
 
-        config['pkg_name'] = pkg_name
+        config['pkg_name'] = rules.pkg_name
 
         config['target'] = self.target
         config['host'] = self.host
         config['build'] = self.build_platform
 
-        if config['target'] is not None:
+        if rules.crosstool:
             qual_format = '{pkg_name}-{target}-{host}'
         else:
             qual_format = '{pkg_name}-{host}'
@@ -320,7 +320,7 @@ class Builder:
         config['release_dir'] = self.j('{root_dir}', 'release', config=config)
         config['release_file'] = self.j('{release_dir}', '{qualifed_pkg_name}.tar.bz2', config=config)
 
-        config['repo_name'] = SOURCE_REPO_PREFIX + pkg_name
+        config['repo_name'] = SOURCE_REPO_PREFIX + rules.pkg_name
 
         if config['build'].endswith('-darwin'):
             config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
