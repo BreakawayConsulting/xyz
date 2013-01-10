@@ -2,6 +2,7 @@ import xyz
 import os
 import shutil
 import time
+import struct
 
 data_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -28,5 +29,13 @@ class Python(xyz.BuildProtocol):
             builder.cmd('make', 'DESTDIR={install_dir_abs}',
                         'bininstall', 'inclinstall', 'libainstall', 'libinstall',
                         config=config)
+
+        for root, _, files in os.walk(config['install_dir']):
+            for f in files:
+                if not (f.endswith('.pyc') or f.endswith('.pyo')):
+                    continue
+                with open(os.path.join(root, f), 'r+b') as outf:
+                    outf.seek(4)
+                    outf.write(struct.pack('I', xyz.BASE_TIME))
 
 rules = Python()
