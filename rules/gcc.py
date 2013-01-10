@@ -3,9 +3,10 @@ import os
 import shutil
 
 class Gcc(xyz.BuildProtocol):
+    crosstool = True
     pkg_name = 'gcc'
     supported_targets = ['arm-none-eabi']
-    deps = ['binutils', 'gmp', 'mpfr', 'mpc']
+    deps = ['texinfo', 'binutils', 'gmp', 'mpfr', 'mpc']
 
     def check(self, builder):
         if builder.target not in self.supported_targets:

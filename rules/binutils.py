@@ -3,6 +3,7 @@ import os
 import shutil
 
 class Binutils(xyz.BuildProtocol):
+    crosstool = True
     pkg_name = 'binutils'
     supported_targets = ['arm-none-eabi']
     deps = ['texinfo']

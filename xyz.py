@@ -213,13 +213,13 @@ class Builder:
         # Install all deps
         for dep in rules.deps:
             ensure_dir(config['devtree_dir'])
-            qual_format = '{dep}-{target}-{host}'
+            dep_rules = self._load_rules(pkg_name)
+            if dep_rules.crosstool:
+                qual_format = '{dep}-{target}-{host}'
+            else:
+                qual_format = '{dep}-{host}'
             qualifed_dep = qual_format.format(dep=dep, **config)
             rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
-            if not os.path.exists(rel_file):
-                qual_format = '{dep}-{host}'
-                qualifed_dep = qual_format.format(dep=dep, **config)
-                rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
 
             if not os.path.exists(rel_file):
                 logger.info("Doing recursive build of '{}'".format(dep))
@@ -436,6 +436,7 @@ class BuildProtocol:
     methods, rather than instance methods.
 
     """
+    crosstool = False
     pkg_name = None
     deps = []
 
