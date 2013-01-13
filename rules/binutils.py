@@ -8,9 +8,10 @@ class Binutils(xyz.BuildProtocol):
     supported_targets = ['arm-none-eabi']
     deps = ['texinfo']
 
-    def check(self, builder):
-        if builder.target not in self.supported_targets:
-            raise xyz.UsageError("Invalid target ({}) for {}".format(builder.target, self.pkg_name))
+    def check(self, config):
+        target = config.get('target')
+        if target not in self.supported_targets:
+            raise xyz.UsageError("Invalid target ({}) for {}".format(target, self.pkg_name))
 
     def configure(self, builder, config):
         builder.cross_configure('--disable-nls', '--enable-lto', '--enable-ld=yes', '--without-zlib',

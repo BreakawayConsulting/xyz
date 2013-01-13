@@ -146,7 +146,7 @@ class Builder:
 
     """
 
-    def __init__(self, build=None, host=None, target=None, jobs=1):
+    def __init__(self, build=None, host=None, jobs=1):
         detected_build = self._detect_build()
         if build is None:
             build = detected_build
@@ -161,7 +161,6 @@ class Builder:
         self.rules_dir = os.path.join(os.path.dirname(__file__), 'rules')
         self.build_platform = build
         self.host = host
-        self.target = target
         self.packaging_dir = ''
         self.source_path = os.path.join(self.packaging_dir, 'source')
         self.build_path = os.path.join(self.packaging_dir, 'build')
@@ -187,7 +186,7 @@ class Builder:
             raise Exception("Unsupported platform/architecture: {}/{}".format(plat, arch))
         return build
 
-    def build(self, pkg_name, reconfigure=False, force=False):
+    def build(self, pkg_name, reconfigure=False, force=False, force_recursive=False, config={}):
         """Build a specified package.
 
         By default the build process avoid re-running the configuration process,
@@ -198,10 +197,14 @@ class Builder:
         """
 
         rules = self._load_rules(pkg_name)
+
         # Check
-        rules.check(self)
+        rules.check(config)
+
         # Prepare
-        config = self._std_config(rules)
+        self._std_config(rules, config)
+
+
         config = rules.prepare(self, config)
 
         # If forced, remove the various dirs.
@@ -211,22 +214,35 @@ class Builder:
             rmtree(self.j('{install_dir}', config=config))
 
         # Install all deps
-        for dep in rules.deps:
+        for dep in rules.get_deps(config):
+            dep_config = {}
+            if type(dep) is type(()):
+                dep_config = dep[1]
+                dep = dep[0]
             ensure_dir(config['devtree_dir'])
             dep_rules = self._load_rules(dep)
-            if dep_rules.crosstool:
-                qual_format = '{dep}-{target}-{host}'
-            else:
-                qual_format = '{dep}-{host}'
-            qualifed_dep = qual_format.format(dep=dep, **config)
-            rel_file = '{release_dir}/{dep}.tar.bz2'.format(dep=qualifed_dep, **config)
+            self._std_config(dep_rules, dep_config)
+            qualified = dep_rules.qualified_name(dep_config)
+            rel_file = '{release_dir}/{name}.tar.bz2'.format(name=qualified, **config)
 
             if not os.path.exists(rel_file):
                 logger.info("Doing recursive build of '{}'".format(dep))
-                self.build(dep, reconfigure=reconfigure, force=force)
+                self.build(dep, reconfigure=reconfigure, force=force_recursive, force_recursive=force_recursive, config=dep_config)
 
-            logger.info("Installing dep: %s", qualifed_dep)
+            logger.info("Installing dep: %s", qualified)
             self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
+
+        if rules.group_only:
+            ensure_dir(config['install_dir'])
+            noprefix_dir = os.path.join(config['install_dir'], 'noprefix')
+            if os.path.exists(noprefix_dir):
+                if os.path.islink(noprefix_dir):
+                    os.unlink(noprefix_dir)
+                else:
+                    shutil.rmtree(noprefix_dir)
+            os.symlink(os.path.join('..', '..', config['devtree_dir']), noprefix_dir)
+            self._package(config)
+            return
 
         # Download
         self._download(config)
@@ -251,7 +267,7 @@ class Builder:
         assert pkg_rules.pkg_name == pkg_name
         return pkg_rules
 
-    def _std_config(self, rules):
+    def _std_config(self, rules, config):
         """Generate the standard configuration for a given package.
 
         Config returns a dictionary with a set of standard key-value
@@ -260,8 +276,6 @@ class Builder:
         The standard configuration keys are:
 
         pkg_name: Name of the package.
-        qualified_pkg_name: The name of the packaged qualified by the
-          host and target platform names.
         target: Target platform (passed as --target to configure).
         host: Host platform (passed as --host to configure).
         build: Build platform (passed as --build to configure).
@@ -285,19 +299,11 @@ class Builder:
         standard_ldflags: Standard linker flags, generally used to set LDFLAGS environment
           variable.
         """
-        config = {}
-
         config['pkg_name'] = rules.pkg_name
-
-        config['target'] = self.target
         config['host'] = self.host
         config['build'] = self.build_platform
 
-        if rules.crosstool:
-            qual_format = '{pkg_name}-{target}-{host}'
-        else:
-            qual_format = '{pkg_name}-{host}'
-        config['qualifed_pkg_name'] = qual_format.format(**config)
+        config['qualified_pkg_name'] = rules.qualified_name(config)
 
         config['prefix'] = '/noprefix'
         config['eprefix'] = self.j('{prefix}', '{host}', config=config)
@@ -311,14 +317,14 @@ class Builder:
             # may not in other circumstances
             config['source_dir_from_build'] = self.j('..', '..', '{source_dir}', config=config)
 
-        config['build_dir'] = self.j('{root_dir}', 'build', '{qualifed_pkg_name}', config=config)
-        config['devtree_dir'] = self.j('{root_dir}', 'devtree', '{qualifed_pkg_name}', config=config)
+        config['build_dir'] = self.j('{root_dir}', 'build', '{qualified_pkg_name}', config=config)
+        config['devtree_dir'] = self.j('{root_dir}', 'devtree', '{qualified_pkg_name}', config=config)
         config['devtree_dir_abs'] = os.path.abspath(config['devtree_dir'])
-        config['install_dir'] = self.j('{root_dir}', 'install', '{qualifed_pkg_name}', config=config)
+        config['install_dir'] = self.j('{root_dir}', 'install', '{qualified_pkg_name}', config=config)
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
         config['release_dir'] = self.j('{root_dir}', 'release', config=config)
-        config['release_file'] = self.j('{release_dir}', '{qualifed_pkg_name}.tar.bz2', config=config)
+        config['release_file'] = self.j('{release_dir}', '{qualified_pkg_name}.tar.bz2', config=config)
 
         config['repo_name'] = SOURCE_REPO_PREFIX + rules.pkg_name
 
@@ -361,7 +367,7 @@ class Builder:
                 logger.info("{pkg_name} already configured. Reconfiguring.".format(**config))
                 os.unlink(configured_flag)
             else:
-                logger.info("{pkg_name} already configured. Aborting".format(**config))
+                logger.info("{pkg_name} already configured. Continuing".format(**config))
                 return
         ensure_dir(config['build_dir'])
 
@@ -440,7 +446,21 @@ class BuildProtocol:
     """
     crosstool = False
     pkg_name = None
+    group_only = False
     deps = []
+
+    def qualified_name(self, config):
+        """
+
+        """
+        print(config, self, self.crosstool)
+        if self.crosstool:
+            return '{pkg_name}-{target}-{host}'.format(**config)
+        else:
+            return '{pkg_name}-{host}'.format(**config)
+
+    def get_deps(self, config):
+        return self.deps
 
     def check(self, builder):
         """check can perform various checks to ensure that the package
@@ -542,6 +562,13 @@ def check_releases():
                 print('\t{} - {:10s} {} {}'.format(dupe, e_type, m.name, extra))
 
 
+def clean():
+    shutil.rmtree('install')
+    shutil.rmtree('devtree')
+    shutil.rmtree('build')
+
+
+
 def main(args):
     """main entry point. args is a list of arguments, generally provided directly
     from sys.argv
@@ -554,28 +581,44 @@ def main(args):
     parser = argparse.ArgumentParser(description='XYZ package builder.')
     parser.add_argument('--build', help='Explicitly set the build system. (default: autodetect)')
     parser.add_argument('--host', help='Explicitly set the host system. (default: build)')
-    parser.add_argument('--target', help='Explicitly set the target system (for toolchains). (default: None)')
     parser.add_argument('--reconfigure', help='Reconfigure. (default: False)', action='store_true', default=False)
     parser.add_argument('--force', help='Force a build. (default: False)', action='store_true', default=False)
+    parser.add_argument('--force-recursive', help='Force a build, and alls deps (default: False)', action='store_true', default=False)
     parser.add_argument('-j', dest='jobs', help='Simultaneous jobs. (default: 1)', type=int, default=1)
-    parser.add_argument('--check-releases', dest='check_releases', action='store_true', default=False,
+    parser.add_argument('--config', help='Comma separated list of config options')
+    parser.add_argument('--check-releases', action='store_true', default=False,
                         help='Check that the release files are consistent.')
+    parser.add_argument('--clean', action='store_true', default=False,
+                        help='Clean devtree, build and install directories.')
+    parser.add_argument('--clean-release', action='store_true', default=False,
+                        help='Clean, including release directory.')
     parser.add_argument('packages', metavar='PKG', nargs='*', help='list of packages to build')
 
     args = parser.parse_args(args[1:])
 
-    if (args.check_releases and len(args.packages) > 0):
-        parser.error("Do not specify packages when checking releases.")
-    elif (not args.check_releases and len(args.packages) == 0):
-        parser.error("At least one package must be listed.")
+    if args.clean:
+        clean()
+        return 0
+
+    if args.clean_release:
+        clean_release()
+        return 0
+
+    if args.force_recursive:
+        args.force = True
+
+    if args.config:
+        config = dict([tuple(x.split(':')) for x in args.config.split(',')])
+    else:
+        config = {}
+
+    b = Builder(args.build, args.host, args.jobs)
+    for pkg in args.packages:
+        b.build(pkg, args.reconfigure, args.force, args.force_recursive, config=config)
 
     if args.check_releases:
         check_releases()
         return 0
-
-    b = Builder(args.build, args.host, args.target, args.jobs)
-    for pkg in args.packages:
-        b.build(pkg, args.reconfigure, args.force)
 
     return 0
 
