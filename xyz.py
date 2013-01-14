@@ -4,14 +4,14 @@ A tool for building relocatable packages of UNIX applications.
 
 See README.md for details.
 """
-import os
-import sys
-import platform
 import calendar
-import logging
-import shutil
-import tarfile
 import hashlib
+import logging
+import os
+import platform
+import shutil
+import sys
+import tarfile
 from contextlib import contextmanager
 
 # Location where all the git repo where the source is stored.
