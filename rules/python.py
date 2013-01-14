@@ -38,4 +38,8 @@ class Python(xyz.BuildProtocol):
                     outf.seek(4)
                     outf.write(struct.pack('I', xyz.BASE_TIME))
 
+        lib_dynload = builder.j('{install_dir}', 'noprefix', '{host}', 'lib', 'python3.3', 'lib-dynload', config=config)
+        os.makedirs(lib_dynload)
+        xyz.touch(os.path.join(lib_dynload, '.dummy'))
+
 rules = Python()
