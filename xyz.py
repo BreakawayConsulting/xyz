@@ -309,6 +309,7 @@ class Builder:
         config['eprefix'] = self.j('{prefix}', '{host}', config=config)
 
         config['root_dir'] = self.packaging_dir
+        config['root_dir_abs'] = os.path.abspath(self.packaging_dir)
         config['source_dir'] = self.j('{root_dir}', 'source', '{pkg_name}', config=config)
         if os.path.isabs(config['root_dir']):
             config['source_dir_from_build'] = config['source_dir']
