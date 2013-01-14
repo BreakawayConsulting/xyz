@@ -39,11 +39,11 @@ This module does two main things:
 A frozen library is a group of individual modules frozen in a single
 C file. The C file basically contains a C array representation of
 the compiled (and optimised) byte code for the module. Additionally
-the frozen library has a <library_name>.lst file that contains
-additionaly meta-information in an easily parsed format.
-
-Note: the meta-information may be directly included in the C source
-code in the future to avoid the need for multiple files.
+the frozen library has a <library_name>_struct.h and
+<library_name>_extern.h file that contains structure elements,
+and extern definitions of the library. These header files are
+used when creating an app, but can be included in a C file directly
+if you know what you are doing.
 
 
 Usage:
@@ -243,15 +243,19 @@ def create_frozen_lib(name, mods, aliases={}):
     name of the underlying module.
 
     """
-    lst_fmt = '{} {} {}\n'
-    lst_filename  = '{}.lst'.format(name)
+    extern_fmt = 'extern unsigned char {}[];\n'
+    struct_fmt = '    {{"{}", {}, {}}},\n'
     c_filename = '{}.c'.format(name)
+    h_struct_filename = '{}_struct.h'.format(name)
+    h_extern_filename = '{}_extern.h'.format(name)
 
     # Although easier for the user to specify {alias: module}
     # the code is simpler if we have {module: [aliases]}
     aliases = dict_inverse(aliases)
 
-    with open(lst_filename, 'w') as lst_out, open(c_filename, 'w') as c_out:
+    with open(h_struct_filename, 'w') as h_struct, \
+            open(h_extern_filename, 'w') as h_ext, \
+            open(c_filename, 'w') as c_out:
 
         for mod_name in sorted(mods.keys()):
             (filename, short_filename, is_pkg) = mods[mod_name]
@@ -266,14 +270,14 @@ def create_frozen_lib(name, mods, aliases={}):
                 size = -size
 
             write_byte_code(c_out, var_name, raw_code)
-            lst_out.write(lst_fmt.format(mod_name, var_name, size))
+
+            h_ext.write(extern_fmt.format(var_name))
+
+            h_struct.write(struct_fmt.format(mod_name, var_name, size))
 
             # Write out all the aliases
             for alias in aliases.get(mod_name, []):
-                lst_out.write(lst_fmt.format(alias, var_name, size))
-
-    c_out.close()
-    lst_out.close()
+                h_struct.write(struct_fmt.format(alias, var_name, size))
 
 
 def find_modules(libdir, excluded=[]):
@@ -386,15 +390,13 @@ def create_app(libs, filename='main.c'):
         outf.write(MAIN_FN)
 
         for l in libs:
-            with open('{}.lst'.format(l)) as f:
-                for l in f.readlines():
-                    outf.write('extern unsigned char {}[];\n'.format(l.strip().split()[1]))
+            with open('{}_extern.h'.format(l)) as f:
+                outf.write(f.read())
 
         outf.write(ARRAY_HEADER)
         for l in libs:
-            with open('{}.lst'.format(l)) as f:
-                for l in f.readlines():
-                    outf.write('    {{"{}", {}, {}}},\n'.format(*l.strip().split()))
+            with open('{}_struct.h'.format(l)) as f:
+                outf.write(f.read())
 
         outf.write(ARRAY_TRAILER)
 
