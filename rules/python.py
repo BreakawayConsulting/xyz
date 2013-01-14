@@ -11,7 +11,7 @@ class Python(xyz.BuildProtocol):
 
     def configure(self, builder, config):
         ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
-        builder.cross_configure('--disable-shared', config=config,
+        builder.host_lib_configure('--disable-shared', config=config,
                                 env={'LDFLAGS': ldflags})
         if config['host'].endswith('darwin'):
             setup_dist = 'pySetup.dist.darwin'
