@@ -12,7 +12,7 @@ class Stlink(xyz.BuildProtocol):
         if self.config['host'].endswith('darwin'):
             os_ldflags = 'OS_LDFLAGS="-lobjc -Wl,-framework,IOKit -Wl,-framework,CoreFoundation"'
         else:
-            os_ldflags = ''
+            os_ldflags = 'OS_LDFLAGS="-lpthread -lrt"'
         self.builder.cmd('make', '-f', '{source_dir_from_build}/Makefile',
                          'LIBUSB_CFLAGS=-I{devtree_dir_abs}/include/libusb-1.0',
                          'LIBUSB_LDFLAGS=-L{devtree_dir_abs}/{host}/lib',
