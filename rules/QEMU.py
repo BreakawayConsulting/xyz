@@ -6,8 +6,10 @@ class Qemu(xyz.BuildProtocol):
     deps = ['pkg-config', 'gettext', 'glib']
 
     def configure(self):
-        env = {}
-        ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
+        if self.config['host'].endswith('darwin'):
+            ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
+        else:
+            ldflags = '{standard_ldflags}'
         args = ('{source_dir_from_build}/configure',
                 '--prefix={prefix}',
                 '--disable-cocoa',
@@ -26,6 +28,7 @@ class Qemu(xyz.BuildProtocol):
                 '--disable-usb',
                 '--disable-smartcard',
                 '--disable-ide',
+                '--disable-pie',
                 #                '--exec-prefix={eprefix}',
                 #                '--host={host}',
                 #                '--build={build}',
@@ -33,10 +36,9 @@ class Qemu(xyz.BuildProtocol):
                 )
         base_env = {
             'LDFLAGS': ldflags,
-            'PKG_CONFIG_PATH': '{devtree_dir_abs}/{host}/lib/pkgconfig'.format(**self.config),
-            'QEMU_PKG_CONFIG_FLAGS': '--define-variable prefix={devtree_dir_abs} --define-variable exec_prefix={devtree_dir_abs}/{host}'.format(**self.config)
+            'PKG_CONFIG_PATH': '{devtree_dir_abs}/{host}/lib/pkgconfig',
+            'QEMU_PKG_CONFIG_FLAGS': '--define-variable prefix={devtree_dir_abs} --define-variable exec_prefix={devtree_dir_abs}/{host} --static',
                     }
-        base_env.update(env)
         self.builder.cmd(*args, env=base_env, config=self.config)
 
     def install(self):
