@@ -359,7 +359,9 @@ class Package:
                 '--host={host}',
                 '--build={build}',
                 '--target={target}')
-        base_env = {'LDFLAGS': '{standard_ldflags}'}
+        base_env = {'LDFLAGS': '{standard_ldflags}',
+                    'CPPFLAGS': '{standard_cppflags}',
+                    }
         base_env.update(env)
         self.cmd(*(args + extra_args), env=base_env)
 
@@ -529,6 +531,12 @@ class Package:
         """make invokes the make utility in the build directory."""
         self.cmd('make', '{jobs}')
 
+    def strip_info_dir(self):
+        # Now remove the silly info/dir file if it exists.
+        info_dir = self.j('{prefix_dir}', 'share', 'info', 'dir')
+        if os.path.exists(info_dir):
+            os.unlink(info_dir)
+
     def install(self):
         """Places build files into the install directory.
 
@@ -539,10 +547,6 @@ class Package:
         with chdir(self.config['build_dir']), umask(0o22):
             self.cmd('make', 'DESTDIR={install_dir_abs}', 'install')
 
-        # Now remove the silly info/dir file if it exists.
-        info_dir = self.j('{prefix_dir}', 'share', 'info', 'dir')
-        if os.path.exists(info_dir):
-            os.unlink(info_dir)
 
         # And remove any .la files
         for root, _, files in os.walk('{install_dir}'.format(**self.config)):
@@ -559,7 +563,7 @@ class Package:
 
         self.strip_libiberty()
         self.strip_silly_info()
-
+        self.strip_info_dir()
 
     def __str__(self):
         return "<{}>".format(self.__class__.__name__)
