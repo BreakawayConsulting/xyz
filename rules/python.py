@@ -39,8 +39,8 @@ class Python(xyz.BuildProtocol):
                     outf.seek(4)
                     outf.write(struct.pack('I', xyz.BASE_TIME))
 
-        lib_dynload = self.builder.j('{install_dir}', 'noprefix', '{host}', 'lib', 'python3.3', 'lib-dynload', config=self.config)
-        os.makedirs(lib_dynload)
-        xyz.touch(os.path.join(lib_dynload, '.dummy'))
+        # Remove lib2to3
+        lib_2to3 = self.builder.j('{install_dir}', 'noprefix', 'lib', 'python3.3', 'lib2to3', config=self.config)
+        xyz.rmtree(lib_2to3)
 
 rules = Python
