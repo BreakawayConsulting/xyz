@@ -6,7 +6,7 @@ XYZ packages are designed to be run by any user from any location on the filesys
 This contrasts from most system packaging systems which generally require system wide installation (and root access to install the package).
 XYZ enables multiple versions of the same packaged application to be installed on a system.
 XYZ is primarily designed for use within development projects that require a specific set of tools (such as embedded systems development toolchains).
-Usually a package itself does not required any run-time depdences, so it should be possible to install packages without requiring many dependent packages.
+Usually a package itself does not required any run-time dependencies, so it should be possible to install packages without requiring any dependent packages.
 
 
 Prerequisites
