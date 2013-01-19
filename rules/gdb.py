@@ -5,8 +5,14 @@ class Gdb(xyz.Package):
     variants = {
         'target': ['arm-none-eabi']
         }
-    deps = ['texinfo', 'python']
     uses_osx_frameworks = True
+
+    @property
+    def deps(self):
+        deps = ['texinfo', 'python']
+        if self.is_linux():
+            deps.append('ncurses')
+        return deps
 
     def configure(self):
         self.cross_configure('--disable-nls', '--enable-lto', '--enable-ld=yes', '--without-zlib')
