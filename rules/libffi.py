@@ -4,8 +4,6 @@ import shutil
 
 class Libffi(xyz.BuildProtocol):
     pkg_name = 'libffi'
+    configure = xyz.BuildProtocol.host_lib_configure
 
-    def configure(self, builder, config):
-        builder.host_lib_configure(config=config)
-
-rules = Libffi()
+rules = Libffi

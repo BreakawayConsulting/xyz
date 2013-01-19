@@ -5,8 +5,6 @@ import shutil
 class Mpc(xyz.BuildProtocol):
     pkg_name = 'mpc'
     deps = ['texinfo', 'gmp', 'mpfr']
+    configure = xyz.BuildProtocol.host_lib_configure
 
-    def configure(self, builder, config):
-        builder.host_lib_configure(config=config)
-
-rules = Mpc()
+rules = Mpc

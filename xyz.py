@@ -35,6 +35,12 @@ def rmtree(path):
 
 
 def man_remove_header(m):
+    """Remove the `generated` header from man pages.
+
+    This is used to help ensure that man pages generated on different systems
+    match.
+
+    """
     tmp = '{}.tmp'.format(m)
     with open(m) as inp, open(tmp, 'w') as outp:
         first = True
@@ -57,6 +63,12 @@ def tar_info_filter(tarinfo):
 
 
 def tar_bz2(output, tree):
+    """Create a tar.bz2 file named `output` from a specified directory tree.
+
+    When creating the tar.bz2 a standard set of meta-data will be used to
+    help ensure things are consistent.
+
+    """
     with tarfile.open(output, 'w:bz2', format=tarfile.GNU_FORMAT) as tf:
         with chdir(tree):
             for f in os.listdir('.'):
@@ -165,6 +177,7 @@ class Builder:
         self.source_path = os.path.join(self.packaging_dir, 'source')
         self.build_path = os.path.join(self.packaging_dir, 'build')
         self.jobs = jobs
+        self.packages = {}
         ensure_dir(self.source_path)
 
     def _detect_build(self):
@@ -186,7 +199,7 @@ class Builder:
             raise Exception("Unsupported platform/architecture: {}/{}".format(plat, arch))
         return build
 
-    def build(self, pkg_name, reconfigure=False, force=False, force_recursive=False, config={}):
+    def build(self, pkg_name, reconfigure=False, force=False, force_recursive=False, variant={}):
         """Build a specified package.
 
         By default the build process avoid re-running the configuration process,
@@ -195,80 +208,233 @@ class Builder:
         By default the build will run make.
 
         """
-
-        rules = self._load_rules(pkg_name)
-
-        # Check
-        rules.check(config)
-
-        # Prepare
-        self._std_config(rules, config)
-
-
-        config = rules.prepare(self, config)
+        pkg = self._load_pkg(pkg_name, variant)
 
         # If forced, remove the various dirs.
         if force:
-            rmtree(self.j('{devtree_dir}', config=config))
-            rmtree(self.j('{build_dir}', config=config))
-            rmtree(self.j('{install_dir}', config=config))
+            rmtree(self.j('{devtree_dir}', config=pkg.config))
+            rmtree(self.j('{build_dir}', config=pkg.config))
+            rmtree(self.j('{install_dir}', config=pkg.config))
 
         # Install all deps
-        for dep in rules.get_deps(config):
-            dep_config = {}
+        for dep in pkg.deps:
+            ensure_dir(self.j('{devtree_dir}', config=pkg.config))
             if type(dep) is type(()):
-                dep_config = dep[1]
-                dep = dep[0]
-            ensure_dir(config['devtree_dir'])
-            dep_rules = self._load_rules(dep)
-            self._std_config(dep_rules, dep_config)
-            qualified = dep_rules.qualified_name(dep_config)
-            rel_file = '{release_dir}/{name}.tar.bz2'.format(name=qualified, **config)
+                dep_name = dep[0]
+                dep_variant = dep[1]
+            else:
+                dep_name = dep
+                dep_variant = {}
 
-            if not os.path.exists(rel_file):
+            dep_pkg = self._load_pkg(dep_name, dep_variant)
+
+            if not os.path.exists(dep_pkg.release_file):
                 logger.info("Doing recursive build of '{}'".format(dep))
-                self.build(dep, reconfigure=reconfigure, force=force_recursive, force_recursive=force_recursive, config=dep_config)
+                self.build(dep_name, reconfigure=reconfigure, force=force_recursive,
+                           force_recursive=force_recursive, variant=dep_variant)
 
-            logger.info("Installing dep: %s", qualified)
-            self.cmd('tar', 'xf', rel_file, '-C', '{devtree_dir}', config=config)
+            logger.info("Installing dep: %s", dep_pkg.variant_name)
+            self.cmd('tar', 'xf', dep_pkg.release_file, '-C', '{devtree_dir}', config=pkg.config)
 
-        if rules.group_only:
-            ensure_dir(config['install_dir'])
-            noprefix_dir = os.path.join(config['install_dir'], 'noprefix')
+        if pkg.group_only:
+            ensure_dir(pkg.config['install_dir'])
+            noprefix_dir = os.path.join(pkg.config['install_dir'], 'noprefix')
             if os.path.exists(noprefix_dir):
                 if os.path.islink(noprefix_dir):
                     os.unlink(noprefix_dir)
                 else:
                     shutil.rmtree(noprefix_dir)
-            os.symlink(os.path.join('..', '..', config['devtree_dir']), noprefix_dir)
-            self._package(config)
+            os.symlink(os.path.join('..', '..', pkg.config['devtree_dir']), noprefix_dir)
+            self._package(pkg)
             return
 
         # Download
-        self._download(config)
+        self._download(pkg)
         # Configure
-        self._configure(rules, config, reconfigure)
+        self._configure(pkg, reconfigure)
         # Make
-        with chdir(config['build_dir']):
-            rules.make(self, config)
+        with chdir(pkg.config['build_dir']):
+            pkg.make()
         # Install
-        if os.path.exists(config['install_dir']):
-            shutil.rmtree(config['install_dir'])
-        ensure_dir(config['install_dir'])
-        rules.install(self, config)
+        if os.path.exists(pkg.config['install_dir']):
+            shutil.rmtree(pkg.config['install_dir'])
+        ensure_dir(pkg.config['install_dir'])
+        pkg.install()
         # Package
-        self._package(config)
+        self._package(pkg)
 
-    def _load_rules(self, pkg_name):
-        """Load and return the rules for a named packaged."""
-        module_name = 'rules.{}'.format(pkg_name)
-        __import__(module_name)
-        pkg_rules = sys.modules[module_name].rules
-        assert pkg_rules.pkg_name == pkg_name
-        return pkg_rules
+    def _load_pkg(self, pkg_name, variant):
+        """Load the specified variant of a package."""
+        pkg_key = (pkg_name, frozenset(variant.items()))
+        if not pkg_key in self.packages:
+            if variant:
+                logger.info("Loading package: {} -- {}".format(pkg_name, variant))
+            else:
+                logger.info("Loading package: {}".format(pkg_name))
+            module_name = 'rules.{}'.format(pkg_name)
+            __import__(module_name)
+            pkg = sys.modules[module_name].rules(self, variant)
+            self.packages[pkg_key] = pkg
 
-    def _std_config(self, rules, config):
-        """Generate the standard configuration for a given package.
+        return self.packages[pkg_key]
+
+
+    def _download(self, pkg, force=False):
+        """Download the package source from git.
+
+        If the source already exists the downloading is skipped, unles
+        the force argument is set to True, in which case the existing
+        source directory is removed before re-downloading the source.
+
+        """
+        if force and os.path.exists(pkg.config['source_dir']):
+            shutil.rmtree(pkg.config['source_dir'])
+        if not os.path.exists(pkg.config['source_dir']):
+            cmd = 'git clone {repo_name} {source_dir}'.format(**pkg.config)
+            logger.info(cmd)
+            os.system(cmd)
+
+        # FIXME: Additional work required here to ensure the correct version
+        # is currently checked out in the source directory.
+
+    def _configure(self, pkg, reconfigure):
+        configured_flag = self.j('{build_dir}', '.configured', config=pkg.config)
+        if os.path.exists(configured_flag):
+            if reconfigure:
+                logger.info("{pkg_name} already configured. Reconfiguring.".format(**pkg.config))
+                os.unlink(configured_flag)
+            else:
+                logger.info("{pkg_name} already configured. Continuing".format(**pkg.config))
+                return
+        ensure_dir(pkg.config['build_dir'])
+
+        with chdir(pkg.config['build_dir']):
+            pkg.configure()
+
+        touch(configured_flag)
+
+    def _package(self, pkg):
+        ensure_dir(pkg.config['release_dir'])
+        pkg_root = self.j('{install_dir}', pkg.config['prefix'][1:], config=pkg.config)
+        tar_bz2('{release_file}'.format(**pkg.config), pkg_root)
+
+    def j(self, *args, config={}):
+        return os.path.join(*[a.format(**config) for a in args])
+
+    def cmd(self, cmd, *args, env={}, config={}):
+        _env = {'PATH': '{devtree_dir_abs}/{host}/bin:/usr/bin:/bin:/usr/sbin:/sbin'.format(**config),
+                'LANG': 'C'
+                }
+        _env.update(env)
+        for key in _env:
+            _env[key] = _env[key].format(**config)
+
+        args = [cmd] + list(args)
+        args = [a.format(**config) for a in args]
+        cmd = ' '.join(args)  # FIXME: Not 100% accurate
+        logger.info('{} ENV={}\n'.format(cmd, _env))
+
+        with setenv(_env):
+            r = os.system(cmd)
+            if r != 0:
+                raise Exception("Error: {}".format(r))
+
+
+    def __str__(self):
+        return '<Builder: build={} host={} target={}>'.format(self.build, self.host, self.target)
+
+
+class BuildProtocol:
+    """Base class for rules implementations.
+
+    The rules sub-class is expected to at least provide an
+    implementation of configure.
+
+    The sub-class should set the class variable `pkg_name`.
+
+    FIXME: Maybe it is clearer if all these methods are class
+    methods, rather than instance methods.
+
+    """
+    crosstool = False
+    pkg_name = None
+    group_only = False
+    deps = []
+    variants = {}
+
+    def __init__(self, builder, variant):
+        """Create a new package."""
+        self.builder = builder
+        self.variant = variant
+
+        # Ensure variant is valid
+        for key, values in self.variants.items():
+            val = self.variant.get(key)
+            if val not in values:
+                msg = "Package {} expect variant {} to be in {}. (Not {})."
+                raise Exception(msg.format(self.pkg_name, key, values, val))
+
+        self.config = self._std_config()
+        self.config.update(variant)
+
+    def host_app_configure(self, *extra_args, env={}):
+        args = ('{source_dir_from_build}/configure',
+                 '--prefix={prefix}',
+                 '--exec-prefix={eprefix}',
+                 '--host={host}',
+                 '--build={build}',
+                 )
+        base_env = {'LDFLAGS': '{standard_ldflags}',
+                    'CPPFLAGS': '{standard_cppflags}',
+                    }
+        base_env.update(env)
+        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+
+    def host_lib_configure(self, *extra_args, env={}):
+        args = ('{source_dir_from_build}/configure',
+                 '--prefix={prefix}',
+                 '--exec-prefix={eprefix}',
+                 '--host={host}',
+                 '--build={build}',
+                 '--disable-shared',
+                 )
+        base_env = {'LDFLAGS': '{standard_ldflags}',
+                    'CPPFLAGS': '{standard_cppflags}',
+                    }
+        base_env.update(env)
+        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+
+    def cross_configure(self, *extra_args, env={}):
+        args = ('{source_dir_from_build}/configure',
+                '--prefix={prefix}',
+                '--exec-prefix={eprefix}',
+                '--program-prefix={target}-',
+                '--host={host}',
+                '--build={build}',
+                '--target={target}')
+        base_env = {'LDFLAGS': '{standard_ldflags}'}
+        base_env.update(env)
+        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+
+    def strip_libiberty(self):
+        to_del = [
+            self.builder.j('{install_dir_abs}', self.config['eprefix'][1:], 'lib', 'libiberty.a', config=self.config),
+            self.builder.j('{install_dir_abs}', self.config['eprefix'][1:], 'lib', 'x86_64', 'libiberty.a', config=self.config)
+            ]
+        for p in to_del:
+            if os.path.exists(p):
+                os.unlink(p)
+
+    def strip_silly_info(self):
+        to_del = ['standards.info', 'configure.info', 'bfd.info']
+        for i in to_del:
+            p = self.builder.j('{install_dir_abs}', self.config['prefix'][1:], 'share', 'info', i, config=self.config)
+            if os.path.exists(p):
+                os.unlink(p)
+
+
+    def _std_config(self):
+        """Generate the standard configuration for the package.
 
         Config returns a dictionary with a set of standard key-value
         pairs which are used by package rules during the build process.
@@ -299,35 +465,36 @@ class Builder:
         standard_ldflags: Standard linker flags, generally used to set LDFLAGS environment
           variable.
         """
-        config['pkg_name'] = rules.pkg_name
-        config['host'] = self.host
-        config['build'] = self.build_platform
+        config = {}
+        config['pkg_name'] = self.pkg_name
+        config['host'] = self.builder.host
+        config['build'] = self.builder.build_platform
 
-        config['qualified_pkg_name'] = rules.qualified_name(config)
+        config['variant_name'] = self.variant_name
 
         config['prefix'] = '/noprefix'
-        config['eprefix'] = self.j('{prefix}', '{host}', config=config)
+        config['eprefix'] = self.builder.j('{prefix}', '{host}', config=config)
 
-        config['root_dir'] = self.packaging_dir
-        config['root_dir_abs'] = os.path.abspath(self.packaging_dir)
-        config['source_dir'] = self.j('{root_dir}', 'source', '{pkg_name}', config=config)
+        config['root_dir'] = self.builder.packaging_dir
+        config['root_dir_abs'] = os.path.abspath(self.builder.packaging_dir)
+        config['source_dir'] = self.builder.j('{root_dir}', 'source', '{pkg_name}', config=config)
         if os.path.isabs(config['root_dir']):
             config['source_dir_from_build'] = config['source_dir']
         else:
             # FIXME: This works when the default build_dir is in place, but
             # may not in other circumstances
-            config['source_dir_from_build'] = self.j('..', '..', '{source_dir}', config=config)
+            config['source_dir_from_build'] = self.builder.j('..', '..', '{source_dir}', config=config)
 
-        config['build_dir'] = self.j('{root_dir}', 'build', '{qualified_pkg_name}', config=config)
-        config['devtree_dir'] = self.j('{root_dir}', 'devtree', '{qualified_pkg_name}', config=config)
+        config['build_dir'] = self.builder.j('{root_dir}', 'build', '{variant_name}', config=config)
+        config['devtree_dir'] = self.builder.j('{root_dir}', 'devtree', '{variant_name}', config=config)
         config['devtree_dir_abs'] = os.path.abspath(config['devtree_dir'])
-        config['install_dir'] = self.j('{root_dir}', 'install', '{qualified_pkg_name}', config=config)
+        config['install_dir'] = self.builder.j('{root_dir}', 'install', '{variant_name}', config=config)
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
-        config['release_dir'] = self.j('{root_dir}', 'release', config=config)
-        config['release_file'] = self.j('{release_dir}', '{qualified_pkg_name}.tar.bz2', config=config)
+        config['release_dir'] = self.builder.j('{root_dir}', 'release', config=config)
+        config['release_file'] = self.builder.j('{release_dir}', '{variant_name}.tar.bz2', config=config)
 
-        config['repo_name'] = SOURCE_REPO_PREFIX + rules.pkg_name
+        config['repo_name'] = SOURCE_REPO_PREFIX + self.pkg_name
 
         if config['build'].endswith('-darwin'):
             config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
@@ -339,138 +506,26 @@ class Builder:
         config['standard_ldflags'] += " -L{devtree_dir_abs}/{host}/lib".format(**config)
         config['standard_cppflags'] = "-I{devtree_dir_abs}/include -I{devtree_dir_abs}/{host}/include".format(**config)
 
-        config['jobs'] = "-j{}".format(self.jobs)
+        config['jobs'] = "-j{}".format(self.builder.jobs)
 
         return config
 
-    def _download(self, config, force=False):
-        """Download the package source from git.
-
-        If the source already exists the downloading is skipped, unles
-        the force argument is set to True, in which case the existing
-        source directory is removed before re-downloading the source.
-
-        """
-        if force and os.path.exists(config['source_dir']):
-            shutil.rmtree(config['source_dir'])
-        if not os.path.exists(config['source_dir']):
-            cmd = 'git clone {repo_name} {source_dir}'.format(**config)
-            logger.info(cmd)
-            os.system(cmd)
-
-        # FIXME: Additional work required here to ensure the correct version
-        # is currently checked out in the source directory.
-
-    def _configure(self, rules, config, reconfigure):
-        configured_flag = self.j('{build_dir}', '.configured', config=config)
-        if os.path.exists(configured_flag):
-            if reconfigure:
-                logger.info("{pkg_name} already configured. Reconfiguring.".format(**config))
-                os.unlink(configured_flag)
-            else:
-                logger.info("{pkg_name} already configured. Continuing".format(**config))
-                return
-        ensure_dir(config['build_dir'])
-
-        with chdir(config['build_dir']):
-            rules.configure(self, config)
-
-        touch(configured_flag)
-
-    def _package(self, config):
-        ensure_dir(config['release_dir'])
-        pkg_root = self.j('{install_dir}', config['prefix'][1:], config=config)
-        tar_bz2('{release_file}'.format(**config), pkg_root)
-
-    def j(self, *args, config={}):
-        return os.path.join(*[a.format(**config) for a in args])
-
-    def cmd(self, cmd, *args, env={}, config={}):
-        _env = {'PATH': '{devtree_dir_abs}/{host}/bin:/usr/bin:/bin:/usr/sbin:/sbin'.format(**config),
-                'LANG': 'C'
-                }
-        _env.update(env)
-        for key in _env:
-            _env[key] = _env[key].format(**config)
-
-        args = [cmd] + list(args)
-        args = [a.format(**config) for a in args]
-        cmd = ' '.join(args)  # FIXME: Not 100% accurate
-        logger.info('{} ENV={}\n'.format(cmd, _env))
-
-        with setenv(_env):
-            r = os.system(cmd)
-            if r != 0:
-                raise Exception("Error: {}".format(r))
-
-    def host_lib_configure(self, *extra_args, env={}, config={}):
-        args = ('{source_dir_from_build}/configure',
-                 '--prefix={prefix}',
-                 '--exec-prefix={eprefix}',
-                 '--host={host}',
-                 '--build={build}',
-                 '--disable-shared',
-                 )
-        base_env = {'LDFLAGS': '{standard_ldflags}',
-                    'CPPFLAGS': '{standard_cppflags}',
-                    }
-        base_env.update(env)
-        self.cmd(*(args + extra_args), env=base_env, config=config)
-
-    def cross_configure(self, *extra_args, env={}, config={}):
-        args = ('{source_dir_from_build}/configure',
-                '--prefix={prefix}',
-                '--exec-prefix={eprefix}',
-                '--program-prefix={target}-',
-                '--host={host}',
-                '--build={build}',
-                '--target={target}')
-        base_env = {'LDFLAGS': '{standard_ldflags}'}
-        base_env.update(env)
-        self.cmd(*(args + extra_args), env=base_env, config=config)
-
-    def __str__(self):
-        return '<Builder: build={} host={} target={}>'.format(self.build, self.host, self.target)
-
-
-class BuildProtocol:
-    """Base class for rules implementations.
-
-    The rules sub-class is expected to at least provide an
-    implementation of configure.
-
-    The sub-class should set the class variable `pkg_name`.
-
-    FIXME: Maybe it is clearer if all these methods are class
-    methods, rather than instance methods.
-
-    """
-    crosstool = False
-    pkg_name = None
-    group_only = False
-    deps = []
-
-    def qualified_name(self, config):
-        """
-
-        """
-        print(config, self, self.crosstool)
-        if self.crosstool:
-            return '{pkg_name}-{target}-{host}'.format(**config)
+    @property
+    def variant_name(self):
+        parts = []
+        for key in sorted(self.variants):
+            val = self.variant.get(key)
+            if val is not None:
+                parts.append('{}_{}'.format(key, val))
+        variant_str = '-'.join(parts)
+        if variant_str:
+            return '{}-{}-{}'.format(self.pkg_name, variant_str, self.builder.host)
         else:
-            return '{pkg_name}-{host}'.format(**config)
+            return '{}-{}'.format(self.pkg_name, self.builder.host)
 
-    def get_deps(self, config):
-        return self.deps
-
-    def check(self, builder):
-        """check can perform various checks to ensure that the package
-        can be built in the current environment. check should raise
-        a UserError exception in the case where the package can not
-        be built.
-
-        """
-        pass
+    @property
+    def release_file(self):
+        return '{release_dir}/{variant_name}.tar.bz2'.format(**self.config)
 
     def prepare(self, builder, config):
         """prepare returns a configuration dictionary containing the appropriate
@@ -482,7 +537,7 @@ class BuildProtocol:
         """
         return config
 
-    def configure(self, builder):
+    def configure(self):
         """configure should (logically) configure the build directory ready for making.
         Generally it is expected that this involves running a `configure` script or the
         equivalent.
@@ -490,33 +545,33 @@ class BuildProtocol:
         """
         raise Exception()
 
-    def make(self, builder, config):
+    def make(self):
         """make invokes the make utility in the build directory."""
-        builder.cmd('make', '{jobs}', config=config)
+        self.builder.cmd('make', '{jobs}', config=self.config)
 
-    def install(self, builder, config):
+    def install(self):
         """install places the built files in to the install
         dir. Whatever is in the install directory at the completion of
         this command is packaged by the builder for release.
 
         """
-        with chdir(config['build_dir']), umask(0o22):
-            builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=config)
+        with chdir(self.config['build_dir']), umask(0o22):
+            self.builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=self.config)
 
         # Now remove the silly info/dir file if it exists.
-        info_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'info', 'dir', config=config)
+        info_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'info', 'dir', config=self.config)
         if os.path.exists(info_dir):
             os.unlink(info_dir)
 
         # And remove any .la files
-        for root, _, files in os.walk('{install_dir}'.format(**config)):
+        for root, _, files in os.walk('{install_dir}'.format(**self.config)):
             for f in files:
                 if f.endswith('.la'):
                     os.unlink(os.path.join(root, f))
 
         # Remove the header from man page
         with umask(0o22):
-            man_dir = builder.j('{install_dir}', config['prefix'][1:], 'share', 'man', config=config)
+            man_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'man', config=self.config)
             for root, _, files in os.walk(man_dir):
                 for f in files:
                     man_remove_header(os.path.join(root, f))
@@ -564,10 +619,14 @@ def check_releases():
 
 
 def clean():
-    shutil.rmtree('install')
-    shutil.rmtree('devtree')
-    shutil.rmtree('build')
+    rmtree('install')
+    rmtree('devtree')
+    rmtree('build')
 
+
+def clean_release():
+    clean()
+    rmtree('release')
 
 
 def main(args):
@@ -615,7 +674,7 @@ def main(args):
 
     b = Builder(args.build, args.host, args.jobs)
     for pkg in args.packages:
-        b.build(pkg, args.reconfigure, args.force, args.force_recursive, config=config)
+        b.build(pkg, args.reconfigure, args.force, args.force_recursive, variant=config)
 
     if args.check_releases:
         check_releases()

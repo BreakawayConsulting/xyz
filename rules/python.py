@@ -9,28 +9,29 @@ data_dir = os.path.abspath(os.path.dirname(__file__))
 class Python(xyz.BuildProtocol):
     pkg_name = 'python'
 
-    def configure(self, builder, config):
-        ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
-        builder.host_lib_configure('--disable-shared', config=config,
-                                env={'LDFLAGS': ldflags})
-        if config['host'].endswith('darwin'):
+    def configure(self):
+        if self.config['host'].endswith('darwin'):
             setup_dist = 'pySetup.dist.darwin'
-        elif config['host'].endswith('linux-gnu'):
+            ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
+        elif self.config['host'].endswith('linux-gnu'):
             setup_dist = 'pySetup.dist.linux'
+            ldflags = '{standard_ldflags}'
         else:
-            raise UsageError("Host for python package must be on darwin or linux-gnu (not {})".format(config['host']))
+            raise UsageError("Host for python package must be on darwin or linux-gnu (not {})".format(self.config['host']))
+
+        self.host_lib_configure(env={'LDFLAGS': ldflags})
         time.sleep(1)
         shutil.copy(os.path.join(data_dir, setup_dist), 'Modules/Setup')
         # Need to regen Makefile after updating Modules/Setup
-        builder.cmd('make', 'Makefile', config=config)
+        self.builder.cmd('make', 'Makefile', config=self.config)
 
-    def install(self, builder, config):
-        with xyz.chdir(config['build_dir']), xyz.umask(0o022):
-            builder.cmd('make', 'DESTDIR={install_dir_abs}',
+    def install(self):
+        with xyz.chdir(self.config['build_dir']), xyz.umask(0o022):
+            self.builder.cmd('make', 'DESTDIR={install_dir_abs}',
                         'bininstall', 'inclinstall', 'libainstall', 'libinstall',
-                        config=config)
+                        config=self.config)
 
-        for root, _, files in os.walk(config['install_dir']):
+        for root, _, files in os.walk(self.config['install_dir']):
             for f in files:
                 if not (f.endswith('.pyc') or f.endswith('.pyo')):
                     continue
@@ -38,8 +39,8 @@ class Python(xyz.BuildProtocol):
                     outf.seek(4)
                     outf.write(struct.pack('I', xyz.BASE_TIME))
 
-        lib_dynload = builder.j('{install_dir}', 'noprefix', '{host}', 'lib', 'python3.3', 'lib-dynload', config=config)
+        lib_dynload = self.builder.j('{install_dir}', 'noprefix', '{host}', 'lib', 'python3.3', 'lib-dynload', config=self.config)
         os.makedirs(lib_dynload)
         xyz.touch(os.path.join(lib_dynload, '.dummy'))
 
-rules = Python()
+rules = Python
