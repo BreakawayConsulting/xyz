@@ -339,6 +339,10 @@ def find_modules(libdir, excluded=[]):
     return modules
 
 
+def merge_dict(dict1, dict2):
+    return dict(list(dict1.items()) + list(dict2.items()))
+
+
 def create_stdlib(excluded=STDLIB_EXCLUDE_LIST):
     """Create a frozen version of the standard library.
 
@@ -351,8 +355,10 @@ def create_stdlib(excluded=STDLIB_EXCLUDE_LIST):
     """
     version = sys.version[:3]
     libdir = os.path.join(sys.prefix, 'lib', 'python{}'.format(version))
+    elibdir = os.path.join(sys.exec_prefix, 'lib', 'python{}'.format(version), 'lib-dynload')
     create_frozen_lib('stdlib',
-                      find_modules(libdir, excluded=excluded),
+                      merge_dict(find_modules(libdir, excluded=excluded),
+                                 find_modules(elibdir, excluded=excluded)),
                       {'_frozen_importlib': 'importlib._bootstrap'})
 
 
