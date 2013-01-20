@@ -43,4 +43,8 @@ class Python(xyz.BuildProtocol):
         lib_2to3 = self.builder.j('{install_dir}', 'noprefix', 'lib', 'python3.3', 'lib2to3', config=self.config)
         xyz.rmtree(lib_2to3)
 
+        for f in ['2to3', 'idle3', 'pydoc3', 'pyvenv']:
+            bin_fn = self.builder.j('{install_dir}', 'noprefix', '{host}', 'bin', f, config=self.config)
+            os.unlink(bin_fn)
+
 rules = Python
