@@ -5,6 +5,7 @@ A tool for building relocatable packages of UNIX applications.
 See README.md for details.
 """
 import calendar
+import contextlib
 import hashlib
 import logging
 import os
@@ -12,7 +13,7 @@ import platform
 import shutil
 import sys
 import tarfile
-from contextlib import contextmanager
+from functools import wraps
 
 # Location where all the git repo where the source is stored.
 SOURCE_REPO_PREFIX = 'git://github.com/BreakawayConsulting/'
@@ -75,6 +76,68 @@ def tar_bz2(output, tree):
                 tf.add(f, filter=tar_info_filter)
 
 
+class _GeneratorSimpleContextManager(contextlib._GeneratorContextManager):
+    """Helper for @simplecontextmanager decorator."""
+
+    def __exit__(self, type, value, traceback):
+        if type is None:
+            try:
+                next(self.gen)
+            except StopIteration:
+                return
+            else:
+                raise RuntimeError("generator didn't stop")
+        else:
+            if value is None:
+                # Need to force instantiation so we can reliably
+                # tell if we get the same exception back
+                value = type()
+
+            try:
+                next(self.gen)
+            except StopIteration as exc:
+                # Suppress the exception *unless* it's the same exception that
+                # was passed to throw().  This prevents a StopIteration
+                # raised inside the "with" statement from being suppressed
+                return exc is not value
+            else:
+                raise RuntimeError("generator didn't stop")
+            finally:
+                return False
+
+
+def simplecontextmanager(func):
+    """@simplecontextmanager decorator.
+
+    Typical usage:
+
+        @simplecontextmanager
+        def some_generator(<arguments>):
+            <setup>
+            yield <value>
+            <cleanup>
+
+    This makes this:
+
+        with some_generator(<arguments>) as <variable>:
+            <body>
+
+    equivalent to this:
+
+        <setup>
+        try:
+            <variable> = <value>
+            <body>
+        finally:
+            <cleanup>
+
+    """
+    @wraps(func)
+    def helper(*args, **kwds):
+        return _GeneratorSimpleContextManager(func, *args, **kwds)
+    return helper
+
+
 class UsageError(Exception):
     """This exception is caught 'cleanly' when running as a script.
 
@@ -93,7 +156,7 @@ def touch(path):
     open(path, 'w').close()
 
 
-@contextmanager
+@simplecontextmanager
 def chdir(path):
     """Current-working directory context manager. Makes the current
     working directory the specified `path` for the duration of the
@@ -112,14 +175,14 @@ def chdir(path):
     os.chdir(cwd)
 
 
-@contextmanager
+@simplecontextmanager
 def umask(new_mask):
     cur_mask = os.umask(new_mask)
     yield
     os.umask(cur_mask)
 
 
-@contextmanager
+@simplecontextmanager
 def setenv(env):
     """os.environ context manager. Updates os.environ with the specified
     `env` for the duration of the context.
