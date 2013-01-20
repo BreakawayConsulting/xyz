@@ -64,6 +64,11 @@ To use the package either directly reference the applications, or add the approp
 In general different packages can be un-archived in the same directory as they do not contain conflicting files.
 The package format may change in the future, however the goal is to keep it simple to avoid the need for heavy-weight installers.
 
+Each tar file has a listing file that is stored in
+`share/xyz/<pkg-variant-name>`. The listing includes a header with
+version information, followed by a list of files in the package
+along with a hash of the file contents.
+
 
 Packaging Directories
 ---------------------

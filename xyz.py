@@ -410,6 +410,19 @@ class Builder:
     def _package(self, pkg):
         ensure_dir(pkg.config['release_dir'])
         pkg_root = self.j('{install_dir}', pkg.config['prefix'][1:], config=pkg.config)
+        # Create the package listing file.
+        files = list(file_list(self.j('{install_dir}', pkg.config['prefix'][1:], config=pkg.config)))
+        pkg_list_fn = self.j('{install_dir}', pkg.config['prefix'][1:], 'share', 'xyz', '{variant_name}', config=pkg.config)
+        ensure_dir(os.path.dirname(pkg_list_fn))
+        with open(pkg_list_fn, 'w') as pkg_list_f:
+            pkg_list_f.write('{variant_name}\n'.format(**pkg.config))
+            pkg_list_f.write("Source Version: {}\n".format(git_ver('{source_dir}'.format(**pkg.config))))
+            pkg_list_f.write("XYZ Version: {}\n".format(git_ver('.')))
+            pkg_list_f.write('\n')
+            for fn in files:
+                pkg_list_f.write('{} {}\n'.format(
+                                 sha256_file(self.j('{install_dir}', pkg.config['prefix'][1:], fn, config=pkg.config)),
+                                 fn))
         tar_bz2('{release_file}'.format(**pkg.config), pkg_root)
 
     def j(self, *args, config={}):
