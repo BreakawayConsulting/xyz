@@ -28,6 +28,13 @@ logging.basicConfig(level=logging.INFO)
 
 BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
 
+
+def sha256_file(filename):
+    with open(filename, "rb") as f:
+        data = f.read()
+        return hashlib.sha256(data).hexdigest()
+
+
 def rmtree(path):
     # FIXME: This has time-of-check time-of-use problem.
     # should really catch the right exception instead.
