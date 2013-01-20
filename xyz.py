@@ -11,6 +11,7 @@ import logging
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import tarfile
 from functools import wraps
@@ -155,6 +156,16 @@ def touch(path):
     """Create an empty file (just like the unix touch command)."""
     open(path, 'w').close()
 
+
+def git_ver(path):
+    with chdir(path):
+        cmd = ['git', 'log', '-1', '--pretty=%H']
+        source_ver = subprocess.check_output(cmd).decode().strip()
+        cmd = ['git', 'status', '--porcelain']
+        dirty = subprocess.check_output(cmd).decode().strip()
+        if len(dirty) > 0:
+            source_ver += '*'
+        return source_ver
 
 @simplecontextmanager
 def chdir(path):
