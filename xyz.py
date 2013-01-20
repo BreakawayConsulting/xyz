@@ -164,6 +164,19 @@ def touch(path):
     open(path, 'w').close()
 
 
+def file_list(root, full_path=False, sort=True):
+    if not root.endswith('/'):
+        root += '/'
+    for base, dirs, files in os.walk(root):
+        if sort:
+            dirs.sort()
+            files.sort()
+        if not full_path:
+            base = base[len(root):]
+        for f in files:
+            yield os.path.join(base, f)
+
+
 def git_ver(path):
     with chdir(path):
         cmd = ['git', 'log', '-1', '--pretty=%H']
