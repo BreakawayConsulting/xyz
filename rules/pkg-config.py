@@ -11,6 +11,6 @@ class PkgConfig(xyz.BuildProtocol):
 
         #'LDFLAGS': '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'.format(**config)}
         # FIXME: doesn't understand --disable-shared (it isn't a lib, so no surprise there!)
-        self.host_lib_configure('--disable-nls')
+        self.host_lib_configure('--disable-nls', env=env)
 
 rules = PkgConfig
