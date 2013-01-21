@@ -416,7 +416,8 @@ class Builder:
         ensure_dir(os.path.dirname(pkg_list_fn))
         with open(pkg_list_fn, 'w') as pkg_list_f:
             pkg_list_f.write('{variant_name}\n'.format(**pkg.config))
-            pkg_list_f.write("Source Version: {}\n".format(git_ver('{source_dir}'.format(**pkg.config))))
+            if not pkg.group_only:
+                pkg_list_f.write("Source Version: {}\n".format(git_ver('{source_dir}'.format(**pkg.config))))
             pkg_list_f.write("XYZ Version: {}\n".format(git_ver('.')))
             pkg_list_f.write('\n')
             for fn in files:
