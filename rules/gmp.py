@@ -1,8 +1,8 @@
 import xyz
 
-class Gmp(xyz.BuildProtocol):
+class Gmp(xyz.Package):
     pkg_name = 'gmp'
     deps = ['texinfo']
-    configure = xyz.BuildProtocol.host_lib_configure
+    configure = xyz.Package.host_lib_configure
 
 rules = Gmp

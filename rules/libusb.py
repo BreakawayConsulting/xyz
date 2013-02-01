@@ -1,15 +1,8 @@
 import xyz
-import os
-import shutil
 
-class Libusb(xyz.BuildProtocol):
+class Libusb(xyz.Package):
     pkg_name = 'libusb'
-    def configure(self):
-        if self.config['host'].endswith('darwin'):
-            ldflags = '{standard_ldflags} -F/Library/Frameworks -F/System/Library/Frameworks'
-        else:
-            ldflags = '{standard_ldflags}'
-        env = {'LDFLAGS': ldflags}
-        self.host_lib_configure(env=env)
+    uses_osx_frameworks = True
+    configure = xyz.Package.host_lib_configure
 
 rules = Libusb

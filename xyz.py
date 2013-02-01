@@ -5,16 +5,14 @@ A tool for building relocatable packages of UNIX applications.
 See README.md for details.
 """
 import calendar
-import contextlib
 import hashlib
 import logging
 import os
 import platform
-import shutil
-import subprocess
 import sys
 import tarfile
-from functools import wraps
+import util
+from util import sha256_file, rmtree, ensure_dir, touch, file_list, chdir, umask, setenv, git_ver
 
 # Location where all the git repo where the source is stored.
 SOURCE_REPO_PREFIX = 'git://github.com/BreakawayConsulting/'
@@ -25,41 +23,9 @@ sys.modules['xyz'] = sys.modules[__name__]
 
 logger = logging.getLogger('xyz')
 logging.basicConfig(level=logging.INFO)
+util.logger = logger
 
 BASE_TIME = calendar.timegm((2013, 1, 1, 0, 0, 0, 0, 0, 0))
-
-
-def sha256_file(filename):
-    with open(filename, "rb") as f:
-        data = f.read()
-        return hashlib.sha256(data).hexdigest()
-
-
-def rmtree(path):
-    # FIXME: This has time-of-check time-of-use problem.
-    # should really catch the right exception instead.
-    if os.path.exists(path):
-        logger.info("Removing tree {}".format(path))
-        shutil.rmtree(path)
-
-
-def man_remove_header(m):
-    """Remove the `generated` header from man pages.
-
-    This is used to help ensure that man pages generated on different systems
-    match.
-
-    """
-    tmp = '{}.tmp'.format(m)
-    with open(m) as inp, open(tmp, 'w') as outp:
-        first = True
-        for l in inp:
-            if first:
-                first = False
-                if 'generated' in l:
-                    continue
-            outp.write(l)
-    os.rename(tmp, m)
 
 
 def tar_info_filter(tarinfo):
@@ -84,66 +50,23 @@ def tar_gz(output, tree):
                 tf.add(f, filter=tar_info_filter)
 
 
-class _GeneratorSimpleContextManager(contextlib._GeneratorContextManager):
-    """Helper for @simplecontextmanager decorator."""
+def man_remove_header(m):
+    """Remove the `generated` header from man pages.
 
-    def __exit__(self, type, value, traceback):
-        if type is None:
-            try:
-                next(self.gen)
-            except StopIteration:
-                return
-            else:
-                raise RuntimeError("generator didn't stop")
-        else:
-            if value is None:
-                # Need to force instantiation so we can reliably
-                # tell if we get the same exception back
-                value = type()
-
-            try:
-                next(self.gen)
-            except StopIteration as exc:
-                # Suppress the exception *unless* it's the same exception that
-                # was passed to throw().  This prevents a StopIteration
-                # raised inside the "with" statement from being suppressed
-                return exc is not value
-            else:
-                raise RuntimeError("generator didn't stop")
-            finally:
-                return False
-
-
-def simplecontextmanager(func):
-    """@simplecontextmanager decorator.
-
-    Typical usage:
-
-        @simplecontextmanager
-        def some_generator(<arguments>):
-            <setup>
-            yield <value>
-            <cleanup>
-
-    This makes this:
-
-        with some_generator(<arguments>) as <variable>:
-            <body>
-
-    equivalent to this:
-
-        <setup>
-        try:
-            <variable> = <value>
-            <body>
-        finally:
-            <cleanup>
+    This is used to help ensure that man pages generated on different systems
+    match.
 
     """
-    @wraps(func)
-    def helper(*args, **kwds):
-        return _GeneratorSimpleContextManager(func, *args, **kwds)
-    return helper
+    tmp = '{}.tmp'.format(m)
+    with open(m, encoding='utf8') as inp, open(tmp, 'w', encoding='utf8') as outp:
+        first = True
+        for l in inp:
+            if first:
+                first = False
+                if 'generated' in l:
+                    continue
+            outp.write(l)
+    os.rename(tmp, m)
 
 
 class UsageError(Exception):
@@ -152,86 +75,6 @@ class UsageError(Exception):
     It allows code to easily return usage errors to the user.
 
     """
-
-
-def ensure_dir(path):
-    """Ensure that a specific directory exists."""
-    return os.makedirs(path, exist_ok=True)
-
-
-def touch(path):
-    """Create an empty file (just like the unix touch command)."""
-    open(path, 'w').close()
-
-
-def file_list(root, full_path=False, sort=True):
-    if not root.endswith('/'):
-        root += '/'
-    for base, dirs, files in os.walk(root):
-        if sort:
-            dirs.sort()
-            files.sort()
-        if not full_path:
-            base = base[len(root):]
-        for f in files:
-            yield os.path.join(base, f)
-
-
-def git_ver(path):
-    with chdir(path):
-        cmd = ['git', 'log', '-1', '--pretty=%H']
-        source_ver = subprocess.check_output(cmd).decode().strip()
-        cmd = ['git', 'status', '--porcelain']
-        dirty = subprocess.check_output(cmd).decode().strip()
-        if len(dirty) > 0:
-            source_ver += '*'
-        return source_ver
-
-@simplecontextmanager
-def chdir(path):
-    """Current-working directory context manager. Makes the current
-    working directory the specified `path` for the duration of the
-    context.
-
-    Example:
-
-    with chdir("newdir"):
-        # Do stuff in the new directory
-        pass
-
-    """
-    cwd = os.getcwd()
-    os.chdir(path)
-    yield
-    os.chdir(cwd)
-
-
-@simplecontextmanager
-def umask(new_mask):
-    cur_mask = os.umask(new_mask)
-    yield
-    os.umask(cur_mask)
-
-
-@simplecontextmanager
-def setenv(env):
-    """os.environ context manager. Updates os.environ with the specified
-    `env` for the duration of the context.
-
-    """
-    old_env = {}
-    for key in env:
-        old_env[key] = os.environ.get(key)
-        os.environ[key] = env[key]
-
-    yield
-
-    for key in old_env:
-        if old_env[key] is None:
-            del os.environ[key]
-        else:
-            os.environ[key] = old_env[key]
-
 
 class Builder:
     """Builder manages the build process.
@@ -251,7 +94,6 @@ class Builder:
     functions or class methods.
 
     """
-
     def __init__(self, build=None, host=None, jobs=1):
         detected_build = self._detect_build()
         if build is None:
@@ -293,70 +135,6 @@ class Builder:
             raise Exception("Unsupported platform/architecture: {}/{}".format(plat, arch))
         return build
 
-    def build(self, pkg_name, reconfigure=False, force=False, force_recursive=False, variant={}):
-        """Build a specified package.
-
-        By default the build process avoid re-running the configuration process,
-        however this can be forced by setting `reconfigure` to true.
-
-        By default the build will run make.
-
-        """
-        pkg = self._load_pkg(pkg_name, variant)
-
-        # If forced, remove the various dirs.
-        if force:
-            rmtree(self.j('{devtree_dir}', config=pkg.config))
-            rmtree(self.j('{build_dir}', config=pkg.config))
-            rmtree(self.j('{install_dir}', config=pkg.config))
-
-        # Install all deps
-        for dep in pkg.deps:
-            ensure_dir(self.j('{devtree_dir}', config=pkg.config))
-            if type(dep) is type(()):
-                dep_name = dep[0]
-                dep_variant = dep[1]
-            else:
-                dep_name = dep
-                dep_variant = {}
-
-            dep_pkg = self._load_pkg(dep_name, dep_variant)
-
-            if not os.path.exists(dep_pkg.release_file):
-                logger.info("Doing recursive build of '{}'".format(dep))
-                self.build(dep_name, reconfigure=reconfigure, force=force_recursive,
-                           force_recursive=force_recursive, variant=dep_variant)
-
-            logger.info("Installing dep: %s", dep_pkg.variant_name)
-            self.cmd('tar', 'xf', dep_pkg.release_file, '-C', '{devtree_dir}', config=pkg.config)
-
-        if pkg.group_only:
-            ensure_dir(pkg.config['install_dir'])
-            noprefix_dir = os.path.join(pkg.config['install_dir'], 'noprefix')
-            if os.path.exists(noprefix_dir):
-                if os.path.islink(noprefix_dir):
-                    os.unlink(noprefix_dir)
-                else:
-                    shutil.rmtree(noprefix_dir)
-            os.symlink(os.path.join('..', '..', pkg.config['devtree_dir']), noprefix_dir)
-            self._package(pkg)
-            return
-
-        # Download
-        self._download(pkg)
-        # Configure
-        self._configure(pkg, reconfigure)
-        # Make
-        with chdir(pkg.config['build_dir']):
-            pkg.make()
-        # Install
-        if os.path.exists(pkg.config['install_dir']):
-            shutil.rmtree(pkg.config['install_dir'])
-        ensure_dir(pkg.config['install_dir'])
-        pkg.install()
-        # Package
-        self._package(pkg)
-
     def _load_pkg(self, pkg_name, variant):
         """Load the specified variant of a package."""
         pkg_key = (pkg_name, frozenset(variant.items()))
@@ -372,88 +150,48 @@ class Builder:
 
         return self.packages[pkg_key]
 
+    def build(self, pkg_name, reconfigure=False, force=False, force_recursive=False, variant={}):
+        """Build a specified package.
 
-    def _download(self, pkg, force=False):
-        """Download the package source from git.
-
-        If the source already exists the downloading is skipped, unles
-        the force argument is set to True, in which case the existing
-        source directory is removed before re-downloading the source.
+        By default the build process avoids re-running the configuration process,
+        however this can be forced by setting `reconfigure` to true.
 
         """
-        if force and os.path.exists(pkg.config['source_dir']):
-            shutil.rmtree(pkg.config['source_dir'])
-        if not os.path.exists(pkg.config['source_dir']):
-            cmd = 'git clone {repo_name} {source_dir}'.format(**pkg.config)
-            logger.info(cmd)
-            os.system(cmd)
+        pkg = self._load_pkg(pkg_name, variant)
 
-        # FIXME: Additional work required here to ensure the correct version
-        # is currently checked out in the source directory.
+        # If forced, remove the various dirs.
+        if force:
+            pkg.rmtree('{devtree_dir}')
+            pkg.rmtree('{build_dir}')
+            pkg.rmtree('{install_dir}')
 
-    def _configure(self, pkg, reconfigure):
-        configured_flag = self.j('{build_dir}', '.configured', config=pkg.config)
-        if os.path.exists(configured_flag):
-            if reconfigure:
-                logger.info("{pkg_name} already configured. Reconfiguring.".format(**pkg.config))
-                os.unlink(configured_flag)
+        # Install all deps
+        for dep in pkg.full_deps:
+            pkg.ensure_dir('{devtree_dir}')
+            if type(dep) is type(()):
+                dep_name = dep[0]
+                dep_variant = dep[1]
             else:
-                logger.info("{pkg_name} already configured. Continuing".format(**pkg.config))
-                return
-        ensure_dir(pkg.config['build_dir'])
+                dep_name = dep
+                dep_variant = {}
 
-        with chdir(pkg.config['build_dir']):
-            pkg.configure()
+            dep_pkg = self._load_pkg(dep_name, dep_variant)
 
-        touch(configured_flag)
+            if not os.path.exists(dep_pkg.release_file):
+                logger.info("Doing recursive build of '{}'".format(dep))
+                self.build(dep_name, reconfigure=reconfigure, force=force_recursive,
+                           force_recursive=force_recursive, variant=dep_variant)
 
-    def _package(self, pkg):
-        ensure_dir(pkg.config['release_dir'])
-        pkg_root = self.j('{prefix_dir}', config=pkg.config)
-        # Create the package listing file.
-        files = list(file_list(self.j('{prefix_dir}', config=pkg.config)))
-        pkg_list_fn = self.j('{prefix_dir}', 'share', 'xyz', '{variant_name}', config=pkg.config)
-        ensure_dir(os.path.dirname(pkg_list_fn))
-        with open(pkg_list_fn, 'w') as pkg_list_f:
-            pkg_list_f.write('{variant_name}\n'.format(**pkg.config))
-            if not pkg.group_only:
-                pkg_list_f.write("Source Version: {}\n".format(git_ver('{source_dir}'.format(**pkg.config))))
-            pkg_list_f.write("XYZ Version: {}\n".format(git_ver('.')))
-            pkg_list_f.write('\n')
-            for fn in files:
-                pkg_list_f.write('{} {}\n'.format(
-                                 sha256_file(self.j('{prefix_dir}', fn, config=pkg.config)),
-                                 fn))
-        logger.info("Creating tar.gz %s/%s -> %s", os.getcwd(), pkg_root, pkg.config['release_file'])
-        tar_gz('{release_file}'.format(**pkg.config), pkg_root)
+            logger.info("Installing dep: %s", dep_pkg.variant_name)
+            pkg.cmd('tar', 'xf', dep_pkg.release_file, '-C', '{devtree_dir}')
 
-    def j(self, *args, config={}):
-        return os.path.join(*[a.format(**config) for a in args])
-
-    def cmd(self, cmd, *args, env={}, config={}):
-        _env = {'PATH': '{devtree_dir_abs}/{host}/bin:/usr/bin:/bin:/usr/sbin:/sbin'.format(**config),
-                'LANG': 'C'
-                }
-        _env.update(env)
-        for key in _env:
-            _env[key] = _env[key].format(**config)
-
-        args = [cmd] + list(args)
-        args = [a.format(**config) for a in args]
-        cmd = ' '.join(args)  # FIXME: Not 100% accurate
-        logger.info('{} ENV={}\n'.format(cmd, _env))
-
-        with setenv(_env):
-            r = os.system(cmd)
-            if r != 0:
-                raise Exception("Error: {}".format(r))
-
+        pkg._build(reconfigure, force, force_recursive, variant)
 
     def __str__(self):
         return '<Builder: build={} host={} target={}>'.format(self.build, self.host, self.target)
 
 
-class BuildProtocol:
+class Package:
     """Base class for rules implementations.
 
     The rules sub-class is expected to at least provide an
@@ -468,8 +206,9 @@ class BuildProtocol:
     crosstool = False
     pkg_name = None
     group_only = False
-    deps = []
     variants = {}
+    uses_osx_frameworks = False
+    deps = []
 
     def __init__(self, builder, variant):
         """Create a new package."""
@@ -486,6 +225,102 @@ class BuildProtocol:
         self.config = self._std_config()
         self.config.update(variant)
 
+    @property
+    def full_deps(self):
+        if self.is_linux():
+            return ['glibc'] + self.deps
+        else:
+            return self.deps
+
+    def ensure_dir(self, *args):
+        ensure_dir(self.j(*args))
+
+    def rmtree(self, *args):
+        rmtree(self.j(*args))
+
+    def exists(self, *args):
+        return os.path.exists(self.j(*args))
+
+    def _build(self, reconfigure, force, force_revursive, variant):
+        if self.group_only:
+            self.ensure_dir('{install_dir}')
+            noprefix_dir = self.j('{install_dir}', 'noprefix')
+            if self.exists(noprefix_dir):
+                if os.path.islink(noprefix_dir):
+                    os.unlink(noprefix_dir)
+                else:
+                    self.rmtree(noprefix_dir)
+            os.symlink(self.j('..', '..', '{devtree_dir}'), noprefix_dir)
+            self._package()
+            return
+
+        # Download
+        self._download()
+        # Configure
+        self._configure(reconfigure)
+        # Make
+        with chdir(self.config['build_dir']):
+            self.make()
+        # Install
+        self.rmtree('{install_dir}')
+        self.ensure_dir('{install_dir}')
+        self.install()
+        # Package
+        self._package()
+
+    def _download(self, force=False):
+        """Download the package source from git.
+
+        If the source already exists the downloading is skipped, unles
+        the force argument is set to True, in which case the existing
+        source directory is removed before re-downloading the source.
+
+        """
+        if force:
+            self.rmtree('{source_dir}')
+        if not self.exists('{source_dir}'):
+            cmd = 'git clone {repo_name} {source_dir}'.format(**self.config)
+            logger.info(cmd)
+            os.system(cmd)
+
+        # FIXME: Additional work required here to ensure the correct version
+        # is currently checked out in the source directory.
+
+    def _configure(self, reconfigure):
+        configured_flag = self.j('{build_dir}', '.configured')
+        if self.exists(configured_flag):
+            if reconfigure:
+                logger.info("{pkg_name} already configured. Reconfiguring.".format(**self.config))
+                os.unlink(configured_flag)
+            else:
+                logger.info("{pkg_name} already configured. Continuing".format(**self.config))
+                return
+        self.ensure_dir('{build_dir}')
+        with chdir(self.config['build_dir']):
+            self.configure()
+
+        touch(configured_flag)
+
+    def _package(self):
+        ensure_dir(self.j('{release_dir}'))
+        pkg_root = self.j('{prefix_dir}')
+        # Create the package listing file.
+        files = list(file_list(self.j('{prefix_dir}')))
+        pkg_list_fn = self.j('{prefix_dir}', 'share', 'xyz', '{variant_name}')
+        self.ensure_dir(os.path.dirname(pkg_list_fn))
+        with open(pkg_list_fn, 'w') as pkg_list_f:
+            pkg_list_f.write('{variant_name}\n'.format(**self.config))
+            if not self.group_only:
+                pkg_list_f.write("Source Version: {}\n".format(git_ver('{source_dir}'.format(**self.config))))
+            pkg_list_f.write("XYZ Version: {}\n".format(git_ver('.')))
+            pkg_list_f.write('\n')
+            for fn in files:
+                pkg_list_f.write('{} {}\n'.format(
+                                 sha256_file(self.j('{prefix_dir}', fn)),
+                                 fn))
+        logger.info("Creating tar.gz %s/%s -> %s", os.getcwd(), pkg_root, self.config['release_file'])
+        tar_gz('{release_file}'.format(**self.config), pkg_root)
+
     def host_app_configure(self, *extra_args, env={}):
         args = ('{source_dir_from_build}/configure',
                  '--prefix={prefix}',
@@ -499,14 +334,17 @@ class BuildProtocol:
         base_env.update(env)
         self.cmd(*(args + extra_args), env=base_env)
 
-    def host_lib_configure(self, *extra_args, env={}):
+    def host_lib_configure(self, *extra_args, env={}, enable_shared=False):
         args = ('{source_dir_from_build}/configure',
                  '--prefix={prefix}',
                  '--exec-prefix={eprefix}',
                  '--host={host}',
                  '--build={build}',
-                 '--disable-shared',
                  )
+
+        if not enable_shared:
+            args = args + ('--disable-shared',)
+
         base_env = {'LDFLAGS': '{standard_ldflags}',
                     'CPPFLAGS': '{standard_cppflags}',
                     }
@@ -526,10 +364,25 @@ class BuildProtocol:
         self.cmd(*(args + extra_args), env=base_env)
 
     def j(self, *args):
-        return self.builder.j(*args, config=self.config)
+        return os.path.join(*[a.format(**self.config) for a in args])
 
-    def cmd(self, *args, env={}):
-        return self.builder.cmd(*args, env=env, config=self.config)
+    def cmd(self, cmd, *args, env={}):
+        _env = {'PATH': '{devtree_dir_abs}/{host}/bin:/usr/bin:/bin:/usr/sbin:/sbin'.format(**self.config),
+                'LANG': 'C'
+                }
+        _env.update(env)
+        for key in _env:
+            _env[key] = _env[key].format(**self.config)
+
+        args = [cmd] + list(args)
+        args = [a.format(**self.config) for a in args]
+        cmd = ' '.join(args)  # FIXME: Not 100% accurate
+        logger.info('{} ENV={}\n'.format(cmd, _env))
+
+        with setenv(_env):
+            r = os.system(cmd)
+            if r != 0:
+                raise Exception("Error: {}".format(r))
 
     def strip_libiberty(self):
         to_del = [
@@ -546,7 +399,6 @@ class BuildProtocol:
             p = self.j('{prefix_dir}', 'share', 'info', i)
             if os.path.exists(p):
                 os.unlink(p)
-
 
     def _std_config(self):
         """Generate the standard configuration for the package.
@@ -580,7 +432,8 @@ class BuildProtocol:
         standard_ldflags: Standard linker flags, generally used to set LDFLAGS environment
           variable.
         """
-        config = {}
+        self.config = {}
+        config = self.config
         config['pkg_name'] = self.pkg_name
         config['host'] = self.builder.host
         config['build'] = self.builder.build_platform
@@ -588,35 +441,38 @@ class BuildProtocol:
         config['variant_name'] = self.variant_name
 
         config['prefix'] = '/noprefix'
-        config['eprefix'] = self.builder.j('{prefix}', '{host}', config=config)
+        config['eprefix'] = self.j('{prefix}', '{host}')
 
         config['root_dir'] = self.builder.packaging_dir
         config['root_dir_abs'] = os.path.abspath(self.builder.packaging_dir)
-        config['source_dir'] = self.builder.j('{root_dir}', 'source', '{pkg_name}', config=config)
+        config['source_dir'] = self.j('{root_dir}', 'source', '{pkg_name}')
         if os.path.isabs(config['root_dir']):
             config['source_dir_from_build'] = config['source_dir']
         else:
             # FIXME: This works when the default build_dir is in place, but
             # may not in other circumstances
-            config['source_dir_from_build'] = self.builder.j('..', '..', '{source_dir}', config=config)
+            config['source_dir_from_build'] = self.j('..', '..', '{source_dir}')
 
-        config['build_dir'] = self.builder.j('{root_dir}', 'build', '{variant_name}', config=config)
-        config['devtree_dir'] = self.builder.j('{root_dir}', 'devtree', '{variant_name}', config=config)
+        config['build_dir'] = self.j('{root_dir}', 'build', '{variant_name}')
+        config['devtree_dir'] = self.j('{root_dir}', 'devtree', '{variant_name}')
         config['devtree_dir_abs'] = os.path.abspath(config['devtree_dir'])
-        config['install_dir'] = self.builder.j('{root_dir}', 'install', '{variant_name}', config=config)
+        config['install_dir'] = self.j('{root_dir}', 'install', '{variant_name}')
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
-        config['prefix_dir'] = self.builder.j('{install_dir}', config['prefix'][1:], config=config)
-        config['eprefix_dir'] = self.builder.j('{install_dir}', config['eprefix'][1:], config=config)
+        config['prefix_dir'] = self.j('{install_dir}', config['prefix'][1:])
+        config['eprefix_dir'] = self.j('{install_dir}', config['eprefix'][1:])
 
-        config['release_dir'] = self.builder.j('{root_dir}', 'release', config=config)
-        config['release_file'] = self.builder.j('{release_dir}', '{variant_name}.tar.gz', config=config)
+        config['release_dir'] = self.j('{root_dir}', 'release')
+        config['release_file'] = self.j('{release_dir}', '{variant_name}.tar.gz')
 
         config['repo_name'] = SOURCE_REPO_PREFIX + self.pkg_name
 
-        if config['build'].endswith('-darwin'):
+        if self.is_darwin():
             config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
-        elif config['build'].endswith('-linux-gnu'):
+            if self.uses_osx_frameworks:
+                config['standard_ldflags'] += " -F/Library/Frameworks -F/System/Library/Frameworks"
+
+        elif self.is_linux():
             config['standard_ldflags'] = ""
         else:
             raise UsageError("Can't determine LD flags for {build}".format(**config))
@@ -627,6 +483,12 @@ class BuildProtocol:
         config['jobs'] = "-j{}".format(self.builder.jobs)
 
         return config
+
+    def is_darwin(self):
+        return self.config['host'].endswith('darwin')
+
+    def is_linux(self):
+        return self.config['host'].endswith('linux-gnu')
 
     @property
     def variant_name(self):
@@ -694,6 +556,9 @@ class BuildProtocol:
             for root, _, files in os.walk(man_dir):
                 for f in files:
                     man_remove_header(os.path.join(root, f))
+
+        self.strip_libiberty()
+        self.strip_silly_info()
 
 
     def __str__(self):

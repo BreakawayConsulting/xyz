@@ -1,10 +1,8 @@
 import xyz
-import os
-import shutil
 
-class Mpc(xyz.BuildProtocol):
+class Mpc(xyz.Package):
     pkg_name = 'mpc'
     deps = ['texinfo', 'gmp', 'mpfr']
-    configure = xyz.BuildProtocol.host_lib_configure
+    configure = xyz.Package.host_lib_configure
 
 rules = Mpc

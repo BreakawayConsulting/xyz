@@ -1,6 +1,6 @@
 import xyz
 
-class Texinfo(xyz.BuildProtocol):
+class Texinfo(xyz.Package):
     pkg_name = 'texinfo'
 
     def configure(self):

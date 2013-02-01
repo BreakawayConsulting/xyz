@@ -1,8 +1,6 @@
 import xyz
-import os
-import shutil
 
-class Libffi(xyz.BuildProtocol):
+class Libffi(xyz.Package):
     pkg_name = 'libffi'
     configure = xyz.BuildProtocol.host_lib_configure
 

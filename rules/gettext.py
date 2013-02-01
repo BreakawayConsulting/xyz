@@ -1,6 +1,6 @@
 import xyz
 
-class Gettext(xyz.BuildProtocol):
+class Gettext(xyz.Package):
     pkg_name = 'gettext'
     configure = xyz.BuildProtocol.host_lib_configure
 

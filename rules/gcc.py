@@ -1,7 +1,7 @@
 import xyz
 import os
 
-class Gcc(xyz.BuildProtocol):
+class Gcc(xyz.Package):
     pkg_name = 'gcc'
     variants = {
         'target': ['arm-none-eabi']
@@ -27,25 +27,22 @@ class Gcc(xyz.BuildProtocol):
 
     def install(self):
         super().install()
-        self.strip_libiberty()
-        self.strip_silly_info()
 
         # For now we strip the man pages.
         # man pages created on different systems are (for no good reason) different!
-        man_dir = self.j('{prefix_dir}', 'share', 'man')
-        xyz.rmtree(man_dir)
+        self.rmtree('{prefix_dir}', 'share', 'man')
 
         # For now we are going to strip out the plugin functionality, until there
         # is usage demand for it (then it may be optional)
         lib_dir = self.j('{eprefix_dir}')
         for root, dirs, _ in os.walk(lib_dir):
             if 'plugin' in dirs:
-                xyz.rmtree(os.path.join(root, 'plugin'))
+                self.rmtree(root, 'plugin')
 
         lib_dir = self.j('{eprefix_dir}')
         for root, dirs, _ in os.walk(lib_dir):
             if 'install-tools' in dirs:
-                xyz.rmtree(os.path.join(root, 'install-tools'))
+                self.rmtree(root, 'install-tools')
                 dirs.remove('install-tools')
 
 rules = Gcc

@@ -1,8 +1,8 @@
 import xyz
 
-class Mpfr(xyz.BuildProtocol):
+class Mpfr(xyz.Package):
     pkg_name = 'mpfr'
     deps = ['texinfo', 'gmp']
-    configure = xyz.BuildProtocol.host_lib_configure
+    configure = xyz.Package.host_lib_configure
 
 rules = Mpfr

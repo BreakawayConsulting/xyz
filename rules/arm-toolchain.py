@@ -1,6 +1,6 @@
 import xyz
 
-class ArmToolchain(xyz.BuildProtocol):
+class ArmToolchain(xyz.Package):
     group_only = True
     pkg_name = 'arm-toolchain'
     deps = [('gcc', {'target': 'arm-none-eabi'}),
