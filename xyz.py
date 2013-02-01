@@ -409,10 +409,10 @@ class Builder:
 
     def _package(self, pkg):
         ensure_dir(pkg.config['release_dir'])
-        pkg_root = self.j('{install_dir}', pkg.config['prefix'][1:], config=pkg.config)
+        pkg_root = self.j('{prefix_dir}', config=pkg.config)
         # Create the package listing file.
-        files = list(file_list(self.j('{install_dir}', pkg.config['prefix'][1:], config=pkg.config)))
-        pkg_list_fn = self.j('{install_dir}', pkg.config['prefix'][1:], 'share', 'xyz', '{variant_name}', config=pkg.config)
+        files = list(file_list(self.j('{prefix_dir}', config=pkg.config)))
+        pkg_list_fn = self.j('{prefix_dir}', 'share', 'xyz', '{variant_name}', config=pkg.config)
         ensure_dir(os.path.dirname(pkg_list_fn))
         with open(pkg_list_fn, 'w') as pkg_list_f:
             pkg_list_f.write('{variant_name}\n'.format(**pkg.config))
@@ -422,8 +422,9 @@ class Builder:
             pkg_list_f.write('\n')
             for fn in files:
                 pkg_list_f.write('{} {}\n'.format(
-                                 sha256_file(self.j('{install_dir}', pkg.config['prefix'][1:], fn, config=pkg.config)),
+                                 sha256_file(self.j('{prefix_dir}', fn, config=pkg.config)),
                                  fn))
+        logger.info("Creating tar.gz %s/%s -> %s", os.getcwd(), pkg_root, pkg.config['release_file'])
         tar_gz('{release_file}'.format(**pkg.config), pkg_root)
 
     def j(self, *args, config={}):
@@ -526,8 +527,8 @@ class BuildProtocol:
 
     def strip_libiberty(self):
         to_del = [
-            self.builder.j('{install_dir_abs}', self.config['eprefix'][1:], 'lib', 'libiberty.a', config=self.config),
-            self.builder.j('{install_dir_abs}', self.config['eprefix'][1:], 'lib', 'x86_64', 'libiberty.a', config=self.config)
+            self.builder.j('{eprefix_dir}', 'lib', 'libiberty.a', config=self.config),
+            self.builder.j('{eprefix_dir}', 'lib', 'x86_64', 'libiberty.a', config=self.config)
             ]
         for p in to_del:
             if os.path.exists(p):
@@ -536,7 +537,7 @@ class BuildProtocol:
     def strip_silly_info(self):
         to_del = ['standards.info', 'configure.info', 'bfd.info']
         for i in to_del:
-            p = self.builder.j('{install_dir_abs}', self.config['prefix'][1:], 'share', 'info', i, config=self.config)
+            p = self.builder.j('{prefix_dir}', 'share', 'info', i, config=self.config)
             if os.path.exists(p):
                 os.unlink(p)
 
@@ -599,6 +600,9 @@ class BuildProtocol:
         config['install_dir'] = self.builder.j('{root_dir}', 'install', '{variant_name}', config=config)
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
+        config['prefix_dir'] = self.builder.j('{install_dir}', config['prefix'][1:], config=config)
+        config['eprefix_dir'] = self.builder.j('{install_dir}', config['eprefix'][1:], config=config)
+
         config['release_dir'] = self.builder.j('{root_dir}', 'release', config=config)
         config['release_file'] = self.builder.j('{release_dir}', '{variant_name}.tar.gz', config=config)
 
@@ -658,16 +662,17 @@ class BuildProtocol:
         self.builder.cmd('make', '{jobs}', config=self.config)
 
     def install(self):
-        """install places the built files in to the install
-        dir. Whatever is in the install directory at the completion of
-        this command is packaged by the builder for release.
+        """Places build files into the install directory.
+
+        Whatever is in the install directory at the completion of this
+        command is packaged by the builder for release.
 
         """
         with chdir(self.config['build_dir']), umask(0o22):
             self.builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=self.config)
 
         # Now remove the silly info/dir file if it exists.
-        info_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'info', 'dir', config=self.config)
+        info_dir = self.builder.j('{prefix_dir}', 'share', 'info', 'dir', config=self.config)
         if os.path.exists(info_dir):
             os.unlink(info_dir)
 
@@ -679,7 +684,7 @@ class BuildProtocol:
 
         # Remove the headers from any man page
         with umask(0o22):
-            man_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'man', config=self.config)
+            man_dir = self.builder.j('{prefix_dir}', 'share', 'man', config=self.config)
             for root, _, files in os.walk(man_dir):
                 for f in files:
                     man_remove_header(os.path.join(root, f))

@@ -48,16 +48,15 @@ class Qemu(xyz.BuildProtocol):
         # to try and keep this working for future version we take this
         # approach for now.
 
-        keymaps_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'qemu',
-                                     config=self.config)
+        keymaps_dir = self.builder.j('{prefix_dir}', 'share', 'qemu', config=self.config)
         xyz.rmtree(keymaps_dir)
 
-        etc_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'etc', config=self.config)
+        etc_dir = self.builder.j('{prefix_dir}', 'etc', config=self.config)
         xyz.rmtree(etc_dir)
 
         # Copy qemu-system-arm to the right bin location...
-        bin_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'bin', config=self.config)
-        ebin_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], '{host}', 'bin', config=self.config)
+        bin_dir = self.builder.j('{prefix_dir}', 'bin', config=self.config)
+        ebin_dir = self.builder.j('{eprefix_dir}', 'bin', config=self.config)
         xyz.ensure_dir(ebin_dir)
         shutil.copy(self.builder.j(bin_dir, 'qemu-system-arm'), ebin_dir)
         xyz.rmtree(bin_dir)

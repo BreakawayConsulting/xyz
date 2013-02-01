@@ -17,7 +17,7 @@ class Binutils(xyz.BuildProtocol):
 
         # For now we strip the man pages.
         # man pages created on different systems are (for no good reason) different!
-        man_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'man', config=self.config)
+        man_dir = self.builder.j('{prefix_dir}', 'share', 'man', config=self.config)
         xyz.rmtree(man_dir)
 
 rules = Binutils
