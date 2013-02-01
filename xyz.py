@@ -497,7 +497,7 @@ class BuildProtocol:
                     'CPPFLAGS': '{standard_cppflags}',
                     }
         base_env.update(env)
-        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+        self.cmd(*(args + extra_args), env=base_env)
 
     def host_lib_configure(self, *extra_args, env={}):
         args = ('{source_dir_from_build}/configure',
@@ -511,7 +511,7 @@ class BuildProtocol:
                     'CPPFLAGS': '{standard_cppflags}',
                     }
         base_env.update(env)
-        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+        self.cmd(*(args + extra_args), env=base_env)
 
     def cross_configure(self, *extra_args, env={}):
         args = ('{source_dir_from_build}/configure',
@@ -523,12 +523,18 @@ class BuildProtocol:
                 '--target={target}')
         base_env = {'LDFLAGS': '{standard_ldflags}'}
         base_env.update(env)
-        self.builder.cmd(*(args + extra_args), env=base_env, config=self.config)
+        self.cmd(*(args + extra_args), env=base_env)
+
+    def j(self, *args):
+        return self.builder.j(*args, config=self.config)
+
+    def cmd(self, *args, env={}):
+        return self.builder.cmd(*args, env=env, config=self.config)
 
     def strip_libiberty(self):
         to_del = [
-            self.builder.j('{eprefix_dir}', 'lib', 'libiberty.a', config=self.config),
-            self.builder.j('{eprefix_dir}', 'lib', 'x86_64', 'libiberty.a', config=self.config)
+            self.j('{eprefix_dir}', 'lib', 'libiberty.a'),
+            self.j('{eprefix_dir}', 'lib', 'x86_64', 'libiberty.a')
             ]
         for p in to_del:
             if os.path.exists(p):
@@ -537,7 +543,7 @@ class BuildProtocol:
     def strip_silly_info(self):
         to_del = ['standards.info', 'configure.info', 'bfd.info']
         for i in to_del:
-            p = self.builder.j('{prefix_dir}', 'share', 'info', i, config=self.config)
+            p = self.j('{prefix_dir}', 'share', 'info', i)
             if os.path.exists(p):
                 os.unlink(p)
 
@@ -659,7 +665,7 @@ class BuildProtocol:
 
     def make(self):
         """make invokes the make utility in the build directory."""
-        self.builder.cmd('make', '{jobs}', config=self.config)
+        self.cmd('make', '{jobs}')
 
     def install(self):
         """Places build files into the install directory.
@@ -669,10 +675,10 @@ class BuildProtocol:
 
         """
         with chdir(self.config['build_dir']), umask(0o22):
-            self.builder.cmd('make', 'DESTDIR={install_dir_abs}', 'install', config=self.config)
+            self.cmd('make', 'DESTDIR={install_dir_abs}', 'install')
 
         # Now remove the silly info/dir file if it exists.
-        info_dir = self.builder.j('{prefix_dir}', 'share', 'info', 'dir', config=self.config)
+        info_dir = self.j('{prefix_dir}', 'share', 'info', 'dir')
         if os.path.exists(info_dir):
             os.unlink(info_dir)
 
@@ -684,7 +690,7 @@ class BuildProtocol:
 
         # Remove the headers from any man page
         with umask(0o22):
-            man_dir = self.builder.j('{prefix_dir}', 'share', 'man', config=self.config)
+            man_dir = self.j('{prefix_dir}', 'share', 'man')
             for root, _, files in os.walk(man_dir):
                 for f in files:
                     man_remove_header(os.path.join(root, f))

@@ -32,17 +32,17 @@ class Gcc(xyz.BuildProtocol):
 
         # For now we strip the man pages.
         # man pages created on different systems are (for no good reason) different!
-        man_dir = self.builder.j('{prefix_dir}', 'share', 'man', config=self.config)
+        man_dir = self.j('{prefix_dir}', 'share', 'man')
         xyz.rmtree(man_dir)
 
         # For now we are going to strip out the plugin functionality, until there
         # is usage demand for it (then it may be optional)
-        lib_dir = self.builder.j('{eprefix_dir}', config=self.config)
+        lib_dir = self.j('{eprefix_dir}')
         for root, dirs, _ in os.walk(lib_dir):
             if 'plugin' in dirs:
                 xyz.rmtree(os.path.join(root, 'plugin'))
 
-        lib_dir = self.builder.j('{eprefix_dir}', config=self.config)
+        lib_dir = self.j('{eprefix_dir}')
         for root, dirs, _ in os.walk(lib_dir):
             if 'install-tools' in dirs:
                 xyz.rmtree(os.path.join(root, 'install-tools'))

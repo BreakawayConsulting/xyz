@@ -39,7 +39,7 @@ class Qemu(xyz.BuildProtocol):
             'PKG_CONFIG_PATH': '{devtree_dir_abs}/{host}/lib/pkgconfig',
             'QEMU_PKG_CONFIG_FLAGS': '--define-variable prefix={devtree_dir_abs} --define-variable exec_prefix={devtree_dir_abs}/{host} --static',
                     }
-        self.builder.cmd(*args, env=base_env, config=self.config)
+        self.cmd(*args, env=base_env)
 
     def install(self):
         super().install()
@@ -48,17 +48,17 @@ class Qemu(xyz.BuildProtocol):
         # to try and keep this working for future version we take this
         # approach for now.
 
-        keymaps_dir = self.builder.j('{prefix_dir}', 'share', 'qemu', config=self.config)
+        keymaps_dir = self.j('{prefix_dir}', 'share', 'qemu')
         xyz.rmtree(keymaps_dir)
 
-        etc_dir = self.builder.j('{prefix_dir}', 'etc', config=self.config)
+        etc_dir = self.j('{prefix_dir}', 'etc')
         xyz.rmtree(etc_dir)
 
         # Copy qemu-system-arm to the right bin location...
-        bin_dir = self.builder.j('{prefix_dir}', 'bin', config=self.config)
-        ebin_dir = self.builder.j('{eprefix_dir}', 'bin', config=self.config)
+        bin_dir = self.j('{prefix_dir}', 'bin')
+        ebin_dir = self.j('{eprefix_dir}', 'bin')
         xyz.ensure_dir(ebin_dir)
-        shutil.copy(self.builder.j(bin_dir, 'qemu-system-arm'), ebin_dir)
+        shutil.copy(self.j(bin_dir, 'qemu-system-arm'), ebin_dir)
         xyz.rmtree(bin_dir)
 
 rules = Qemu

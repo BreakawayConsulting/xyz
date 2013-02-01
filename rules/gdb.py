@@ -21,7 +21,7 @@ class Gdb(xyz.BuildProtocol):
         # this Python
         xyz.ensure_dir('gdb')
         with xyz.chdir('gdb'):
-            self.builder.cmd('{devtree_dir_abs}/{host}/bin/python3', '{root_dir_abs}/ice/ice.py', 'stdlib', config=self.config)
+            self.cmd('{devtree_dir_abs}/{host}/bin/python3', '{root_dir_abs}/ice/ice.py', 'stdlib')
 
     def install(self):
         super().install()

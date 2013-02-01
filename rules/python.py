@@ -23,13 +23,12 @@ class Python(xyz.BuildProtocol):
         time.sleep(1)
         shutil.copy(os.path.join(data_dir, setup_dist), 'Modules/Setup')
         # Need to regen Makefile after updating Modules/Setup
-        self.builder.cmd('make', 'Makefile', config=self.config)
+        self.cmd('make', 'Makefile')
 
     def install(self):
         with xyz.chdir(self.config['build_dir']), xyz.umask(0o022):
-            self.builder.cmd('make', 'DESTDIR={install_dir_abs}',
-                        'bininstall', 'inclinstall', 'libainstall', 'libinstall',
-                        config=self.config)
+            self.cmd('make', 'DESTDIR={install_dir_abs}',
+                        'bininstall', 'inclinstall', 'libainstall', 'libinstall')
 
         for root, _, files in os.walk(self.config['install_dir']):
             for f in files:
@@ -40,11 +39,11 @@ class Python(xyz.BuildProtocol):
                     outf.write(struct.pack('I', xyz.BASE_TIME))
 
         # Remove lib2to3
-        lib_2to3 = self.builder.j('{install_dir}', 'noprefix', 'lib', 'python3.3', 'lib2to3', config=self.config)
+        lib_2to3 = self.j('{install_dir}', 'noprefix', 'lib', 'python3.3', 'lib2to3')
         xyz.rmtree(lib_2to3)
 
         for f in ['2to3', 'idle3', 'pydoc3', 'pyvenv']:
-            bin_fn = self.builder.j('{install_dir}', 'noprefix', '{host}', 'bin', f, config=self.config)
+            bin_fn = self.j('{install_dir}', 'noprefix', '{host}', 'bin', f)
             os.unlink(bin_fn)
 
 rules = Python
