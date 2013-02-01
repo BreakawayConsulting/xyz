@@ -71,14 +71,14 @@ def tar_info_filter(tarinfo):
     return tarinfo
 
 
-def tar_bz2(output, tree):
-    """Create a tar.bz2 file named `output` from a specified directory tree.
+def tar_gz(output, tree):
+    """Create a tar.gz file named `output` from a specified directory tree.
 
-    When creating the tar.bz2 a standard set of meta-data will be used to
+    When creating the tar.gz a standard set of meta-data will be used to
     help ensure things are consistent.
 
     """
-    with tarfile.open(output, 'w:bz2', format=tarfile.GNU_FORMAT) as tf:
+    with tarfile.open(output, 'w:gz', format=tarfile.GNU_FORMAT) as tf:
         with chdir(tree):
             for f in os.listdir('.'):
                 tf.add(f, filter=tar_info_filter)
@@ -424,7 +424,7 @@ class Builder:
                 pkg_list_f.write('{} {}\n'.format(
                                  sha256_file(self.j('{install_dir}', pkg.config['prefix'][1:], fn, config=pkg.config)),
                                  fn))
-        tar_bz2('{release_file}'.format(**pkg.config), pkg_root)
+        tar_gz('{release_file}'.format(**pkg.config), pkg_root)
 
     def j(self, *args, config={}):
         return os.path.join(*[a.format(**config) for a in args])
@@ -600,7 +600,7 @@ class BuildProtocol:
         config['install_dir_abs'] = os.path.abspath(config['install_dir'])
 
         config['release_dir'] = self.builder.j('{root_dir}', 'release', config=config)
-        config['release_file'] = self.builder.j('{release_dir}', '{variant_name}.tar.bz2', config=config)
+        config['release_file'] = self.builder.j('{release_dir}', '{variant_name}.tar.gz', config=config)
 
         config['repo_name'] = SOURCE_REPO_PREFIX + self.pkg_name
 
@@ -633,7 +633,7 @@ class BuildProtocol:
 
     @property
     def release_file(self):
-        return '{release_dir}/{variant_name}.tar.bz2'.format(**self.config)
+        return '{release_dir}/{variant_name}.tar.gz'.format(**self.config)
 
     def prepare(self, builder, config):
         """prepare returns a configuration dictionary containing the appropriate
@@ -677,7 +677,7 @@ class BuildProtocol:
                 if f.endswith('.la'):
                     os.unlink(os.path.join(root, f))
 
-        # Remove the header from man page
+        # Remove the headers from any man page
         with umask(0o22):
             man_dir = self.builder.j('{install_dir}', self.config['prefix'][1:], 'share', 'man', config=self.config)
             for root, _, files in os.walk(man_dir):
