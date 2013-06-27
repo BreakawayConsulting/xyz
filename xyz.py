@@ -470,17 +470,21 @@ class Package:
         config['repo_name'] = SOURCE_REPO_PREFIX + self.pkg_name
 
         if self.is_darwin():
-            config['standard_ldflags'] = "-Wl,-Z -Wl,-search_paths_first"
+            sdk_version = "10.6"
+            sdk_root = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX{}.sdk".format(sdk_version)
+            config['standard_ldflags'] = " -Wl,-search_paths_first -Wl,-syslibroot,{}".format(sdk_root)
             if self.uses_osx_frameworks:
                 config['standard_ldflags'] += " -F/Library/Frameworks -F/System/Library/Frameworks"
+            config['standard_cppflags'] = " -isysroot {}".format(sdk_root)
 
         elif self.is_linux():
             config['standard_ldflags'] = ""
+            config['standard_cppflags'] = ""
         else:
             raise UsageError("Can't determine LD flags for {build}".format(**config))
 
         config['standard_ldflags'] += " -L{devtree_dir_abs}/{host}/lib".format(**config)
-        config['standard_cppflags'] = "-I{devtree_dir_abs}/include -I{devtree_dir_abs}/{host}/include".format(**config)
+        config['standard_cppflags'] += " -I{devtree_dir_abs}/include -I{devtree_dir_abs}/{host}/include".format(**config)
 
         config['jobs'] = "-j{}".format(self.builder.jobs)
 

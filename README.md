@@ -150,17 +150,19 @@ One of the goals of XYZ is that it should be simple to reproduce builds easily.
 To achieve this the tools aims to minimize the extent to which environmental concerns may impact on the build.
 Some of the techniques used are:
 
-### `-Z` linker flag (OS X only)
+### `-syslibroot` linker flag / `-isysroot` CPP flag  (OS X only)
 
-The `-Z` flag disables the standard linker library search path.
-Specifically, this stops the linker searching `/usr/local/lib`, which may contain any number of uncontrolled libraries.
-Use of this flag avoids inadvertently using these libraries.
+This is used to compile against a specific Mac OS X SDK.
+This ensures that the created binaries are compatible with older versions of OS X.
+This ensures that the `/usr/local/lib` path in not used, which reduces the chance of inadvertently linking against uncontrolled libraries.
 
 ### `-search_paths_first` linker flag. (OS X only)
 
 On OS X the standard search path is unintuitive.
 The linker tries very hard to use dynamic libraries over static libraries, and will search all paths for a dynamic library before falling back to static libraries.
 The `-search_paths_first` linker flag changes this behaviour so that the linker searches for dynamic or static library in each part of the search path.
+
+Note: This flag is now the default on latest Xcode.
 
 ### Minimal `PATH` environment set
 
