@@ -617,6 +617,67 @@ def clean_release():
     rmtree('release')
 
 
+class PkgRoot:
+    def __init__(self, pkg_root):
+        assert pkg_root is not None
+        if not pkg_root.endswith('/'):
+            pkg_root = pkg_root + '/'
+        self.pkg_root = pkg_root
+        xyz_dir = os.path.join(self.pkg_root, 'share', 'xyz')
+        self.pkgs = os.listdir(xyz_dir)
+        all_files = {}
+        for pkg in self.pkgs:
+            with open(os.path.join(xyz_dir, pkg)) as f:
+                got_it = False
+                for lin in f.readlines():
+                    lin = lin.strip()
+                    if not got_it and len(lin) == 0:
+                        got_it = True
+                    elif got_it:
+                        filehash, filename = lin.split()
+                        if filename in all_files:
+                            if all_files[filename][0] != filehash:
+                                print("BAD-HASH", filename, pkg, all_files[filename][1])
+                        else:
+                            all_files[filename] = (filehash, [])
+                        all_files[filename][1].append(pkg)
+
+        self.all_files = all_files
+
+    def verify(self):
+        for root, dirs, files in os.walk(self.pkg_root):
+            if root == os.path.join(self.pkg_root, 'share'):
+                dirs.remove('xyz')
+            for f in files:
+                fn = os.path.join(root, f)
+                fn_base = fn[len(self.pkg_root):]
+                if fn_base not in self.all_files:
+                    print("warning: no pkg: ", fn_base)
+                elif sha256_file(fn) != self.all_files[fn_base][0]:
+                    print("warning: bad hash:", fn_base)
+
+    def update(self, pkg_name, pkg_filename):
+        self.remove(pkg_name)
+        self.install(pkg_filename)
+
+    def remove(self, pkg_name):
+        # FIXME: Unimplemented
+        if pkg_name not in self.pkgs:
+            print("Can't remove package")
+
+    def install(self, pkg_filename):
+        # FIXME: Unimplemented
+        # Ensure it doesn't conflict.
+        pass
+
+
+def do_list(args):
+    pr = PkgRoot(args.pkg_root)
+    pr.verify()
+    for pkg in pr.pkgs:
+        print(pkg)
+
+
 def main(args):
     """main entry point. args is a list of arguments, generally provided directly
     from sys.argv
@@ -627,6 +688,7 @@ def main(args):
     import argparse
 
     parser = argparse.ArgumentParser(description='XYZ package builder.')
+    parser.add_argument('--pkg-root', help='Root of package install directory.')
     parser.add_argument('--build', help='Explicitly set the build system. (default: autodetect)')
     parser.add_argument('--host', help='Explicitly set the host system. (default: build)')
     parser.add_argument('--reconfigure', help='Reconfigure. (default: False)', action='store_true', default=False)
@@ -640,6 +702,8 @@ def main(args):
                         help='Clean devtree, build and install directories.')
     parser.add_argument('--clean-release', action='store_true', default=False,
                         help='Clean, including release directory.')
+    parser.add_argument('--list', action='store_true', default=False,
+                        help='List installed packages.')
     parser.add_argument('packages', metavar='PKG', nargs='*', help='list of packages to build')
 
     args = parser.parse_args(args[1:])
@@ -650,6 +714,12 @@ def main(args):
 
     if args.clean_release:
         clean_release()
+        return 0
+
+    if args.list:
+        if args.pkg_root is None:
+            parser.error("--pkg-root must be specified when using --list")
+        do_list(args)
         return 0
 
     if args.force_recursive:
