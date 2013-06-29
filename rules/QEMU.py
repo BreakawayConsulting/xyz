@@ -13,7 +13,10 @@ class Qemu(xyz.Package):
                 '--target-list=arm-softmmu',
                 '--disable-curses',
                 '--disable-vnc',
+                '--disable-tools',
+                '--without-pixman',
                 '--disable-console',
+                '--disable-default-devices',
                 '--enable-werror',
                 '--disable-slirp',
                 '--disable-curl',
@@ -23,9 +26,9 @@ class Qemu(xyz.Package):
                 '--audio-drv-list=',
                 '--audio-card-list=',
                 '--disable-usb',
-                '--disable-smartcard',
                 '--disable-ide',
                 '--disable-pie',
+                '--enable-debug',
                 )
         base_env = {
             'PKG_CONFIG_PATH': '{devtree_dir_abs}/{host}/lib/pkgconfig',
